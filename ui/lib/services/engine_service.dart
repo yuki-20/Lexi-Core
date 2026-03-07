@@ -1,5 +1,7 @@
-/// LexiCore — Engine API Service
+/// LexiCore — Engine API Service (v3.0)
 /// Communicates with the Python FastAPI backend at localhost:8741.
+/// Covers all v3.0 endpoints: search, flashcards, quiz, file import,
+/// performance, profile, pets, welcome, pronunciation.
 library;
 
 import 'dart:convert';
@@ -44,7 +46,10 @@ class EngineService {
     }));
   }
 
-  // ── HTTP Endpoints ──
+  // ══════════════════════════════════════════════════════════════════
+  // SEARCH
+  // ══════════════════════════════════════════════════════════════════
+
   Future<SearchResult> searchExact(String query) async {
     try {
       final resp = await http.get(
@@ -54,6 +59,18 @@ class EngineService {
       return SearchResult.fromJson(data);
     } catch (e) {
       return SearchResult(found: false, query: query, timingMs: 0);
+    }
+  }
+
+  Future<SearchResult> searchOnline(String query) async {
+    try {
+      final resp = await http.get(
+        Uri.parse('$_baseUrl/api/search/online?q=${Uri.encodeComponent(query)}'),
+      ).timeout(const Duration(seconds: 10));
+      final data = jsonDecode(resp.body);
+      return SearchResult.fromJson(data);
+    } catch (e) {
+      return SearchResult(found: false, query: query, timingMs: 0, source: 'online');
     }
   }
 
@@ -81,6 +98,10 @@ class EngineService {
     }
   }
 
+  // ══════════════════════════════════════════════════════════════════
+  // STATS & WELCOME
+  // ══════════════════════════════════════════════════════════════════
+
   Future<Map<String, dynamic>> getStats() async {
     try {
       final resp = await http.get(Uri.parse('$_baseUrl/api/stats'))
@@ -101,6 +122,20 @@ class EngineService {
     }
   }
 
+  Future<Map<String, dynamic>> getWelcome() async {
+    try {
+      final resp = await http.get(Uri.parse('$_baseUrl/api/welcome'))
+          .timeout(const Duration(seconds: 3));
+      return jsonDecode(resp.body);
+    } catch (_) {
+      return {'message': 'Welcome back!', 'name': 'Learner', 'streak': 0};
+    }
+  }
+
+  // ══════════════════════════════════════════════════════════════════
+  // SAVED WORDS
+  // ══════════════════════════════════════════════════════════════════
+
   Future<bool> saveWord(String word, {String? definition}) async {
     try {
       final resp = await http.post(
@@ -114,6 +149,295 @@ class EngineService {
     }
   }
 
+  Future<List<Map<String, dynamic>>> getSavedWords() async {
+    try {
+      final resp = await http.get(Uri.parse('$_baseUrl/api/saved'))
+          .timeout(const Duration(seconds: 3));
+      final data = jsonDecode(resp.body);
+      return List<Map<String, dynamic>>.from(data['words'] ?? []);
+    } catch (_) {
+      return [];
+    }
+  }
+
+  Future<bool> deleteSavedWord(String word) async {
+    try {
+      final resp = await http.delete(
+        Uri.parse('$_baseUrl/api/saved/${Uri.encodeComponent(word)}'),
+      ).timeout(const Duration(seconds: 3));
+      return resp.statusCode == 200;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  // ══════════════════════════════════════════════════════════════════
+  // FLASHCARD DECKS
+  // ══════════════════════════════════════════════════════════════════
+
+  Future<List<Map<String, dynamic>>> getDecks() async {
+    try {
+      final resp = await http.get(Uri.parse('$_baseUrl/api/decks'))
+          .timeout(const Duration(seconds: 3));
+      final data = jsonDecode(resp.body);
+      return List<Map<String, dynamic>>.from(data['decks'] ?? []);
+    } catch (_) {
+      return [];
+    }
+  }
+
+  Future<int?> createDeck(String name, {String source = 'manual'}) async {
+    try {
+      final resp = await http.post(
+        Uri.parse('$_baseUrl/api/decks'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'name': name, 'source': source}),
+      ).timeout(const Duration(seconds: 3));
+      final data = jsonDecode(resp.body);
+      return data['id'];
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<bool> deleteDeck(int deckId) async {
+    try {
+      final resp = await http.delete(
+        Uri.parse('$_baseUrl/api/decks/$deckId'),
+      ).timeout(const Duration(seconds: 3));
+      return resp.statusCode == 200;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> getCards(int deckId) async {
+    try {
+      final resp = await http.get(
+        Uri.parse('$_baseUrl/api/decks/$deckId/cards'),
+      ).timeout(const Duration(seconds: 3));
+      final data = jsonDecode(resp.body);
+      return List<Map<String, dynamic>>.from(data['cards'] ?? []);
+    } catch (_) {
+      return [];
+    }
+  }
+
+  Future<bool> addCard(int deckId, String word, {String? definition}) async {
+    try {
+      final resp = await http.post(
+        Uri.parse('$_baseUrl/api/decks/$deckId/cards'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'word': word, 'definition': definition}),
+      ).timeout(const Duration(seconds: 3));
+      return resp.statusCode == 200;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<Map<String, dynamic>?> createDeckFromWords(
+    String name, List<String> words, {int? count}
+  ) async {
+    try {
+      final resp = await http.post(
+        Uri.parse('$_baseUrl/api/decks/from-words'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'name': name,
+          'words': words,
+          if (count != null) 'count': count,
+        }),
+      ).timeout(const Duration(seconds: 10));
+      return jsonDecode(resp.body);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  // ══════════════════════════════════════════════════════════════════
+  // QUIZ
+  // ══════════════════════════════════════════════════════════════════
+
+  Future<Map<String, dynamic>?> generateQuiz({int? deckId, int count = 10}) async {
+    try {
+      String url = '$_baseUrl/api/quiz/generate?count=$count';
+      if (deckId != null) url += '&deck_id=$deckId';
+      final resp = await http.get(Uri.parse(url))
+          .timeout(const Duration(seconds: 5));
+      return jsonDecode(resp.body);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<Map<String, dynamic>?> submitQuiz({
+    int? deckId,
+    required List<Map<String, dynamic>> answers,
+    double? durationS,
+  }) async {
+    try {
+      final resp = await http.post(
+        Uri.parse('$_baseUrl/api/quiz/submit'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'deck_id': deckId,
+          'answers': answers,
+          'duration_s': durationS,
+        }),
+      ).timeout(const Duration(seconds: 5));
+      return jsonDecode(resp.body);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> getQuizHistory({int limit = 20}) async {
+    try {
+      final resp = await http.get(
+        Uri.parse('$_baseUrl/api/quiz/history?limit=$limit'),
+      ).timeout(const Duration(seconds: 3));
+      final data = jsonDecode(resp.body);
+      return List<Map<String, dynamic>>.from(data['history'] ?? []);
+    } catch (_) {
+      return [];
+    }
+  }
+
+  // ══════════════════════════════════════════════════════════════════
+  // FILE IMPORT
+  // ══════════════════════════════════════════════════════════════════
+
+  Future<List<Map<String, dynamic>>> getImportedFiles() async {
+    try {
+      final resp = await http.get(Uri.parse('$_baseUrl/api/import/files'))
+          .timeout(const Duration(seconds: 3));
+      final data = jsonDecode(resp.body);
+      return List<Map<String, dynamic>>.from(data['files'] ?? []);
+    } catch (_) {
+      return [];
+    }
+  }
+
+  Future<bool> deleteImportedFile(int fileId) async {
+    try {
+      final resp = await http.delete(
+        Uri.parse('$_baseUrl/api/import/files/$fileId'),
+      ).timeout(const Duration(seconds: 3));
+      return resp.statusCode == 200;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> getFileWords(int fileId) async {
+    try {
+      final resp = await http.get(
+        Uri.parse('$_baseUrl/api/import/files/$fileId/words'),
+      ).timeout(const Duration(seconds: 3));
+      final data = jsonDecode(resp.body);
+      return List<Map<String, dynamic>>.from(data['words'] ?? []);
+    } catch (_) {
+      return [];
+    }
+  }
+
+  // ══════════════════════════════════════════════════════════════════
+  // PROFILE
+  // ══════════════════════════════════════════════════════════════════
+
+  Future<Map<String, dynamic>> getProfile() async {
+    try {
+      final resp = await http.get(Uri.parse('$_baseUrl/api/profile'))
+          .timeout(const Duration(seconds: 3));
+      final data = jsonDecode(resp.body);
+      return Map<String, dynamic>.from(data['profile'] ?? {});
+    } catch (_) {
+      return {};
+    }
+  }
+
+  Future<bool> updateProfile(String key, String value) async {
+    try {
+      final resp = await http.put(
+        Uri.parse('$_baseUrl/api/profile'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'key': key, 'value': value}),
+      ).timeout(const Duration(seconds: 3));
+      return resp.statusCode == 200;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  // ══════════════════════════════════════════════════════════════════
+  // PETS
+  // ══════════════════════════════════════════════════════════════════
+
+  Future<List<Map<String, dynamic>>> getAllPets() async {
+    try {
+      final resp = await http.get(Uri.parse('$_baseUrl/api/pets'))
+          .timeout(const Duration(seconds: 3));
+      final data = jsonDecode(resp.body);
+      return List<Map<String, dynamic>>.from(data['pets'] ?? []);
+    } catch (_) {
+      return [];
+    }
+  }
+
+  Future<List<String>> checkPetUnlocks() async {
+    try {
+      final resp = await http.post(Uri.parse('$_baseUrl/api/pets/check'))
+          .timeout(const Duration(seconds: 3));
+      final data = jsonDecode(resp.body);
+      return List<String>.from(data['new_pets'] ?? []);
+    } catch (_) {
+      return [];
+    }
+  }
+
+  // ══════════════════════════════════════════════════════════════════
+  // PERFORMANCE
+  // ══════════════════════════════════════════════════════════════════
+
+  Future<Map<String, dynamic>> getPerformance() async {
+    try {
+      final resp = await http.get(Uri.parse('$_baseUrl/api/performance'))
+          .timeout(const Duration(seconds: 3));
+      return jsonDecode(resp.body);
+    } catch (_) {
+      return {};
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> getPerformanceHistory() async {
+    try {
+      final resp = await http.get(Uri.parse('$_baseUrl/api/performance/history'))
+          .timeout(const Duration(seconds: 3));
+      final data = jsonDecode(resp.body);
+      return List<Map<String, dynamic>>.from(data['history'] ?? []);
+    } catch (_) {
+      return [];
+    }
+  }
+
+  // ══════════════════════════════════════════════════════════════════
+  // PRONUNCIATION
+  // ══════════════════════════════════════════════════════════════════
+
+  Future<String?> getPronunciationUrl(String word, {String accent = 'us'}) async {
+    try {
+      final resp = await http.get(
+        Uri.parse('$_baseUrl/api/pronounce?q=${Uri.encodeComponent(word)}&accent=$accent'),
+      ).timeout(const Duration(seconds: 5));
+      final data = jsonDecode(resp.body);
+      return data['audio_url'];
+    } catch (_) {
+      return null;
+    }
+  }
+
+  // ── Reverse Search ──
   Future<List<ReverseResult>> reverseSearch(String query) async {
     try {
       final resp = await http.get(
@@ -134,7 +458,9 @@ class EngineService {
   }
 }
 
-// ── Data Models ──
+// ══════════════════════════════════════════════════════════════════════
+// DATA MODELS
+// ══════════════════════════════════════════════════════════════════════
 
 class SearchResult {
   final bool found;
@@ -167,6 +493,8 @@ class SearchResult {
   List<String> get synonyms => List<String>.from(definition?['synonyms'] ?? []);
   List<String> get examples => List<String>.from(definition?['examples'] ?? []);
   String get etymology => definition?['etymology'] ?? '';
+  String? get audioUs => definition?['audio_us'];
+  String? get audioUk => definition?['audio_uk'];
 }
 
 class AutocompleteResult {

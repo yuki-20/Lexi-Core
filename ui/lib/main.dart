@@ -1,17 +1,19 @@
-/// LexiCore Engine — Liquid Glass Desktop App
-/// iOS 26 Liquid Glass UI with authentic backdrop blur and prismatic effects.
+/// LexiCore Engine v3.0 — Liquid Glass Desktop App
+/// iOS 26 Liquid Glass UI with 5-tab navigation.
 library;
 
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 
 import 'theme/liquid_glass_theme.dart';
-import 'services/engine_service.dart';
 import 'widgets/glass_panel.dart';
-import 'widgets/search_bar.dart' as lexi;
-import 'widgets/definition_card.dart';
-import 'widgets/autocomplete_dropdown.dart';
-import 'widgets/stats_overlay.dart';
+import 'pages/home_page.dart';
+import 'pages/flashcards_page.dart';
+import 'pages/quiz_page.dart';
+import 'pages/saved_words_page.dart';
+import 'pages/performance_page.dart';
+import 'pages/settings_page.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -27,485 +29,227 @@ class LexiCoreApp extends StatelessWidget {
       title: 'LexiCore Engine',
       debugShowCheckedModeBanner: false,
       theme: LiquidGlassTheme.dark,
-      home: const LexiCoreHome(),
+      home: const LexiCoreShell(),
     );
   }
 }
 
-class LexiCoreHome extends StatefulWidget {
-  const LexiCoreHome({super.key});
+/// ── Shell: Ambient background + Bottom Nav + Pages ──
+
+class LexiCoreShell extends StatefulWidget {
+  const LexiCoreShell({super.key});
 
   @override
-  State<LexiCoreHome> createState() => _LexiCoreHomeState();
+  State<LexiCoreShell> createState() => _LexiCoreShellState();
 }
 
-class _LexiCoreHomeState extends State<LexiCoreHome>
+class _LexiCoreShellState extends State<LexiCoreShell>
     with TickerProviderStateMixin {
-  final _engine = EngineService();
+  int _currentIndex = 0;
 
-  // State
-  SearchResult? _currentResult;
-  List<String> _suggestions = [];
-  double _autocompleteTimingMs = 0;
-  bool _isSearching = false;
-  bool _isWordSaved = false;
+  // Ambient orb animations
+  late final List<AnimationController> _orbControllers;
 
-  // Stats
-  int _dictSize = 0;
-  int _streakDays = 0;
-  int _totalExp = 0;
-  double _cacheHitRate = 0;
-
-  // Word of the Day
-  String? _wotdWord;
-  Map<String, dynamic>? _wotdDef;
+  static const _orbColors = [
+    Color(0xFF7B2FBE), // purple
+    Color(0xFF00BCD4), // cyan
+    Color(0xFFE91E63), // pink
+    Color(0xFF2962FF), // blue
+    Color(0xFFFF9100), // amber
+  ];
 
   @override
   void initState() {
     super.initState();
-    _engine.connectWebSocket();
-    _loadStats();
-    _loadWotd();
-
-    // Listen to WebSocket autocomplete
-    _engine.autocompleteStream.listen((result) {
-      if (mounted) {
-        setState(() {
-          _suggestions = result.suggestions;
-          _autocompleteTimingMs = result.timingMs;
-        });
-      }
-    });
-  }
-
-  Future<void> _loadStats() async {
-    final stats = await _engine.getStats();
-    if (mounted && stats.isNotEmpty) {
-      setState(() {
-        _dictSize = stats['dictionary_size'] ?? 0;
-        final learning = stats['learning'] as Map<String, dynamic>? ?? {};
-        _streakDays = learning['streak_days'] ?? 0;
-        _totalExp = learning['total_exp'] ?? 0;
-        final cache = stats['cache'] as Map<String, dynamic>? ?? {};
-        _cacheHitRate = (cache['hit_rate'] ?? 0).toDouble();
-      });
-    }
-  }
-
-  Future<void> _loadWotd() async {
-    final data = await _engine.getWordOfTheDay();
-    if (mounted && data != null) {
-      setState(() {
-        _wotdWord = data['word'];
-        _wotdDef = data['definition'];
-      });
-    }
-  }
-
-  void _onSearchChanged(String value) {
-    if (value.length >= 2) {
-      _engine.sendAutocomplete(value);
-    } else {
-      setState(() => _suggestions = []);
-    }
-  }
-
-  Future<void> _onSearch(String query) async {
-    if (query.trim().isEmpty) return;
-    setState(() {
-      _isSearching = true;
-      _suggestions = [];
-    });
-
-    final result = await _engine.searchExact(query);
-
-    if (!result.found) {
-      // Try fuzzy
-      final fuzzy = await _engine.searchFuzzy(query);
-      if (fuzzy.isNotEmpty) {
-        final fuzzyResult = await _engine.searchExact(fuzzy.first);
-        setState(() {
-          _currentResult = fuzzyResult.found ? fuzzyResult : null;
-          _isSearching = false;
-        });
-        return;
-      }
-    }
-
-    setState(() {
-      _currentResult = result.found ? result : null;
-      _isSearching = false;
-      _isWordSaved = false;
-    });
-    _loadStats(); // refresh stats
-  }
-
-  void _onSuggestionSelected(String word) {
-    _onSearch(word);
-  }
-
-  Future<void> _onSaveWord() async {
-    if (_currentResult == null) return;
-    final success = await _engine.saveWord(
-      _currentResult!.word,
-      definition: _currentResult!.definitions.join('; '),
+    _orbControllers = List.generate(5, (i) =>
+      AnimationController(
+        vsync: this,
+        duration: Duration(seconds: 8 + i * 3),
+      )..repeat(reverse: true),
     );
-    if (success && mounted) {
-      setState(() => _isWordSaved = true);
-    }
   }
 
   @override
   void dispose() {
-    _engine.dispose();
+    for (final c in _orbControllers) {
+      c.dispose();
+    }
     super.dispose();
   }
 
+  final _pages = const <Widget>[
+    HomePage(),
+    FlashcardsPage(),
+    QuizPage(),
+    SavedWordsPage(),
+    PerformancePage(),
+    SettingsPage(),
+  ];
+
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            LiquidGlassTheme.bgGradientStart,
-            LiquidGlassTheme.bgGradientEnd,
-            Color(0xFF0F0A1A),
-          ],
-        ),
-      ),
-      child: Scaffold(
-        backgroundColor: Colors.transparent,
-        body: Stack(
-          children: [
-            // Background ambient orbs
-            ..._buildAmbientOrbs(),
+    return Scaffold(
+      backgroundColor: LiquidGlassTheme.bgDeep,
+      body: Stack(
+        children: [
+          // ── Ambient Orbs ──
+          ...List.generate(5, (i) => _AmbientOrb(
+            controller: _orbControllers[i],
+            color: _orbColors[i],
+            index: i,
+          )),
 
-            // Main content
-            SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 20),
-                child: Column(
-                  children: [
-                    // Header
-                    _buildHeader(),
-                    const SizedBox(height: 24),
-
-                    // Search bar
-                    lexi.SearchBar(
-                      onSearch: _onSearch,
-                      onChanged: _onSearchChanged,
-                      isLoading: _isSearching,
-                    ),
-
-                    // Autocomplete
-                    if (_suggestions.isNotEmpty)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 4),
-                        child: AutocompleteDropdown(
-                          suggestions: _suggestions,
-                          onSelect: _onSuggestionSelected,
-                          timingMs: _autocompleteTimingMs,
-                        ),
-                      ),
-
-                    const SizedBox(height: 20),
-
-                    // Content area
-                    Expanded(
-                      child: SingleChildScrollView(
-                        child: _currentResult != null
-                            ? DefinitionCard(
-                                result: _currentResult!,
-                                onSave: _onSaveWord,
-                                isSaved: _isWordSaved,
-                              )
-                            : _buildWelcome(),
-                      ),
-                    ),
-
-                    // Stats bar
-                    const SizedBox(height: 12),
-                    StatsOverlay(
-                      dictionarySize: _dictSize,
-                      streakDays: _streakDays,
-                      totalExp: _totalExp,
-                      cacheHitRate: _cacheHitRate,
-                    ),
-                  ],
-                ),
+          // ── Page Content ──
+          SafeArea(
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 300),
+              child: KeyedSubtree(
+                key: ValueKey(_currentIndex),
+                child: _pages[_currentIndex],
               ),
             ),
-          ],
+          ),
+
+          // ── Glass Bottom Nav ──
+          Positioned(
+            left: 20,
+            right: 20,
+            bottom: 20,
+            child: _GlassBottomNav(
+              currentIndex: _currentIndex,
+              onTap: (i) => setState(() => _currentIndex = i),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// ── Ambient Orb ──
+class _AmbientOrb extends AnimatedWidget {
+  final Color color;
+  final int index;
+
+  const _AmbientOrb({
+    required AnimationController controller,
+    required this.color,
+    required this.index,
+  }) : super(listenable: controller);
+
+  @override
+  Widget build(BuildContext context) {
+    final animation = listenable as AnimationController;
+    final size = MediaQuery.of(context).size;
+
+    // Each orb has a unique path
+    final t = animation.value;
+    final positions = [
+      Offset(size.width * 0.15, size.height * (0.15 + 0.1 * math.sin(t * math.pi))),
+      Offset(size.width * (0.7 + 0.1 * math.cos(t * math.pi)), size.height * 0.25),
+      Offset(size.width * 0.5, size.height * (0.6 + 0.08 * math.sin(t * math.pi))),
+      Offset(size.width * (0.2 + 0.1 * math.sin(t * math.pi)), size.height * 0.75),
+      Offset(size.width * (0.8 - 0.1 * math.cos(t * math.pi)), size.height * 0.85),
+    ];
+
+    final pos = positions[index % positions.length];
+    final orbSize = 120.0 + index * 30.0;
+
+    return Positioned(
+      left: pos.dx - orbSize / 2,
+      top: pos.dy - orbSize / 2,
+      child: Container(
+        width: orbSize,
+        height: orbSize,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          gradient: RadialGradient(
+            colors: [
+              color.withValues(alpha: 0.2 + 0.05 * math.sin(t * math.pi)),
+              color.withValues(alpha: 0.0),
+            ],
+          ),
         ),
       ),
     );
   }
+}
 
-  Widget _buildHeader() {
-    return Row(
-      children: [
-        // Logo
-        Container(
-          padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
-            gradient: LinearGradient(
-              colors: [
-                LiquidGlassTheme.accentPrimary.withValues(alpha: 0.3),
-                LiquidGlassTheme.accentSecondary.withValues(alpha: 0.2),
-              ],
-            ),
-          ),
-          child: const Icon(
-            Icons.auto_awesome_rounded,
-            color: LiquidGlassTheme.accentPrimary,
-            size: 22,
-          ),
-        ),
-        const SizedBox(width: 12),
-        Text(
-          'LexiCore',
-          style: LiquidGlassTheme.headingSm.copyWith(
-            fontWeight: FontWeight.w700,
-            letterSpacing: -0.5,
-          ),
-        ),
-        const SizedBox(width: 6),
-        Text(
-          'v2.0',
-          style: LiquidGlassTheme.mono.copyWith(
-            fontSize: 11,
-            color: LiquidGlassTheme.accentPrimary.withValues(alpha: 0.7),
-          ),
-        ),
-        const Spacer(),
-        // Engine status indicator
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: LiquidGlassTheme.glassBorder),
-            color: LiquidGlassTheme.glassFill,
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 6,
-                height: 6,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: _dictSize > 0 ? Colors.green : Colors.orange,
-                  boxShadow: [
-                    BoxShadow(
-                      color: (_dictSize > 0 ? Colors.green : Colors.orange).withValues(alpha: 0.5),
-                      blurRadius: 6,
-                    ),
-                  ],
-                ),
+/// ── Glass Bottom Navigation Bar ──
+class _GlassBottomNav extends StatelessWidget {
+  final int currentIndex;
+  final ValueChanged<int> onTap;
+
+  const _GlassBottomNav({required this.currentIndex, required this.onTap});
+
+  static const _items = [
+    _NavItem(Icons.home_rounded, 'Home'),
+    _NavItem(Icons.style_rounded, 'Cards'),
+    _NavItem(Icons.quiz_rounded, 'Quiz'),
+    _NavItem(Icons.bookmark_rounded, 'Words'),
+    _NavItem(Icons.analytics_rounded, 'Stats'),
+    _NavItem(Icons.settings_rounded, 'More'),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return GlassPanel(
+      borderRadius: 28,
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceAround,
+        children: _items.asMap().entries.map((entry) {
+          final isActive = entry.key == currentIndex;
+          return GestureDetector(
+            onTap: () => onTap(entry.key),
+            behavior: HitTestBehavior.opaque,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 250),
+              padding: EdgeInsets.symmetric(
+                horizontal: isActive ? 16 : 12,
+                vertical: 8,
               ),
-              const SizedBox(width: 6),
-              Text(
-                _dictSize > 0 ? 'Engine Online' : 'Connecting...',
-                style: LiquidGlassTheme.bodySmall.copyWith(fontSize: 11),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(20),
+                color: isActive
+                    ? LiquidGlassTheme.accentPrimary.withValues(alpha: 0.15)
+                    : Colors.transparent,
               ),
-            ],
-          ),
-        ),
-      ],
-    ).animate().fadeIn(duration: 600.ms);
-  }
-
-  Widget _buildWelcome() {
-    return Column(
-      children: [
-        const SizedBox(height: 40),
-        // Animated logo
-        Container(
-          width: 80,
-          height: 80,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            gradient: RadialGradient(
-              colors: [
-                LiquidGlassTheme.accentPrimary.withValues(alpha: 0.2),
-                Colors.transparent,
-              ],
-            ),
-          ),
-          child: Icon(
-            Icons.auto_awesome_rounded,
-            size: 40,
-            color: LiquidGlassTheme.accentPrimary.withValues(alpha: 0.6),
-          ),
-        ).animate(onPlay: (c) => c.repeat(reverse: true))
-         .scale(begin: const Offset(0.95, 0.95), end: const Offset(1.05, 1.05), duration: 2000.ms),
-        const SizedBox(height: 20),
-        Text(
-          'Search any word',
-          style: LiquidGlassTheme.headingSm.copyWith(
-            color: LiquidGlassTheme.textSecondary,
-          ),
-        ),
-        const SizedBox(height: 8),
-        Text(
-          'Real-time autocomplete  •  Fuzzy matching  •  Phonetic search',
-          style: LiquidGlassTheme.bodySmall,
-          textAlign: TextAlign.center,
-        ),
-
-        // Word of the Day
-        if (_wotdWord != null) ...[
-          const SizedBox(height: 30),
-          GlassPanel(
-            borderRadius: LiquidGlassTheme.borderRadiusSm,
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Icon(Icons.today_rounded, size: 14,
-                      color: LiquidGlassTheme.accentTertiary.withValues(alpha: 0.8)),
-                    const SizedBox(width: 6),
-                    Text('Word of the Day', style: LiquidGlassTheme.bodySmall.copyWith(
-                      color: LiquidGlassTheme.accentTertiary,
-                      fontWeight: FontWeight.w600,
-                    )),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                GestureDetector(
-                  onTap: () => _onSearch(_wotdWord!),
-                  child: Text(
-                    _wotdWord!,
-                    style: LiquidGlassTheme.heading.copyWith(fontSize: 24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    entry.value.icon,
+                    size: isActive ? 24 : 22,
+                    color: isActive
+                        ? LiquidGlassTheme.accentPrimary
+                        : LiquidGlassTheme.textMuted,
                   ),
-                ),
-                if (_wotdDef != null && _wotdDef!['definitions'] != null)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 6),
-                    child: Text(
-                      (_wotdDef!['definitions'] as List).first.toString(),
-                      style: LiquidGlassTheme.body,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
+                  const SizedBox(height: 4),
+                  AnimatedDefaultTextStyle(
+                    duration: const Duration(milliseconds: 200),
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: isActive ? FontWeight.w600 : FontWeight.w400,
+                      color: isActive
+                          ? LiquidGlassTheme.accentPrimary
+                          : LiquidGlassTheme.textMuted,
                     ),
+                    child: Text(entry.value.label),
                   ),
-              ],
+                ],
+              ),
             ),
-          ).animate().fadeIn(delay: 300.ms, duration: 500.ms),
-        ],
-      ],
-    ).animate().fadeIn(duration: 500.ms);
+          );
+        }).toList(),
+      ),
+    ).animate().fadeIn(delay: 600.ms, duration: 500.ms)
+     .slideY(begin: 0.3, end: 0);
   }
+}
 
-  List<Widget> _buildAmbientOrbs() {
-    return [
-      // Purple orb — top right
-      Positioned(
-        top: -80,
-        right: -30,
-        child: Container(
-          width: 350,
-          height: 350,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            gradient: RadialGradient(
-              colors: [
-                LiquidGlassTheme.orbPurple.withValues(alpha: 0.25),
-                LiquidGlassTheme.orbPurple.withValues(alpha: 0.08),
-                Colors.transparent,
-              ],
-              stops: const [0.0, 0.5, 1.0],
-            ),
-          ),
-        ).animate(onPlay: (c) => c.repeat(reverse: true))
-         .scale(begin: const Offset(0.9, 0.9), end: const Offset(1.15, 1.15), duration: 4000.ms)
-         .moveX(begin: 0, end: 20, duration: 6000.ms),
-      ),
-      // Cyan orb — bottom left
-      Positioned(
-        bottom: -60,
-        left: -40,
-        child: Container(
-          width: 300,
-          height: 300,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            gradient: RadialGradient(
-              colors: [
-                LiquidGlassTheme.orbCyan.withValues(alpha: 0.20),
-                LiquidGlassTheme.orbCyan.withValues(alpha: 0.06),
-                Colors.transparent,
-              ],
-              stops: const [0.0, 0.5, 1.0],
-            ),
-          ),
-        ).animate(onPlay: (c) => c.repeat(reverse: true))
-         .scale(begin: const Offset(1.1, 1.1), end: const Offset(0.85, 0.85), duration: 5000.ms),
-      ),
-      // Pink orb — center left
-      Positioned(
-        top: 200,
-        left: 60,
-        child: Container(
-          width: 250,
-          height: 250,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            gradient: RadialGradient(
-              colors: [
-                LiquidGlassTheme.orbPink.withValues(alpha: 0.18),
-                LiquidGlassTheme.orbPink.withValues(alpha: 0.05),
-                Colors.transparent,
-              ],
-              stops: const [0.0, 0.5, 1.0],
-            ),
-          ),
-        ).animate(onPlay: (c) => c.repeat(reverse: true))
-         .scale(begin: const Offset(0.95, 0.95), end: const Offset(1.1, 1.1), duration: 3500.ms),
-      ),
-      // Blue orb — top left
-      Positioned(
-        top: -30,
-        left: -50,
-        child: Container(
-          width: 280,
-          height: 280,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            gradient: RadialGradient(
-              colors: [
-                LiquidGlassTheme.orbBlue.withValues(alpha: 0.15),
-                Colors.transparent,
-              ],
-            ),
-          ),
-        ).animate(onPlay: (c) => c.repeat(reverse: true))
-         .scale(begin: const Offset(1.0, 1.0), end: const Offset(1.12, 1.12), duration: 4500.ms),
-      ),
-      // Amber orb — bottom right
-      Positioned(
-        bottom: 80,
-        right: -30,
-        child: Container(
-          width: 220,
-          height: 220,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            gradient: RadialGradient(
-              colors: [
-                LiquidGlassTheme.orbAmber.withValues(alpha: 0.12),
-                Colors.transparent,
-              ],
-            ),
-          ),
-        ).animate(onPlay: (c) => c.repeat(reverse: true))
-         .scale(begin: const Offset(1.05, 1.05), end: const Offset(0.92, 0.92), duration: 3800.ms),
-      ),
-    ];
-  }
+class _NavItem {
+  final IconData icon;
+  final String label;
+  const _NavItem(this.icon, this.label);
 }
