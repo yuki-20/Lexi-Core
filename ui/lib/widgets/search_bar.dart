@@ -69,10 +69,10 @@ class _SearchBarState extends State<SearchBar> {
             child: TextField(
               controller: _controller,
               focusNode: _focusNode,
-              style: LiquidGlassTheme.searchInput,
+              style: LiquidGlassTheme.body.copyWith(color: LiquidGlassTheme.textPrimary),
               decoration: InputDecoration(
                 hintText: 'Search for a word...',
-                hintStyle: LiquidGlassTheme.searchInput.copyWith(
+                hintStyle: LiquidGlassTheme.body.copyWith(
                   color: LiquidGlassTheme.textMuted,
                 ),
                 border: InputBorder.none,

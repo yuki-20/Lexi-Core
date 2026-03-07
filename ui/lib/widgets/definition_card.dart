@@ -147,7 +147,7 @@ class DefinitionCard extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(LiquidGlassTheme.borderRadiusXs),
+                borderRadius: BorderRadius.circular(LiquidGlassTheme.borderRadiusSm),
                 color: LiquidGlassTheme.accentPrimary.withValues(alpha: 0.06),
                 border: Border.all(
                   color: LiquidGlassTheme.accentPrimary.withValues(alpha: 0.15),
@@ -193,7 +193,7 @@ class _PosPill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = LiquidGlassTheme.getPosColor(label);
+    final color = LiquidGlassTheme.posColor(label);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
       decoration: BoxDecoration(

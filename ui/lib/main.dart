@@ -1,9 +1,8 @@
 /// LexiCore Engine — Liquid Glass Desktop App
-/// Main entry point with Acrylic window + full search UI.
+/// iOS 26 Liquid Glass UI with authentic backdrop blur and prismatic effects.
 library;
 
 import 'package:flutter/material.dart';
-import 'package:flutter_acrylic/flutter_acrylic.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 
 import 'theme/liquid_glass_theme.dart';
@@ -16,17 +15,6 @@ import 'widgets/stats_overlay.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  try {
-    await Window.initialize();
-    await Window.setEffect(
-      effect: WindowEffect.acrylic,
-      color: const Color(0xCC0A0A12),
-      dark: true,
-    );
-    await Window.setWindowBackgroundColorToClear();
-  } catch (_) {
-    // Acrylic may not be available — app still works without it
-  }
   runApp(const LexiCoreApp());
 }
 
@@ -416,9 +404,32 @@ class _LexiCoreHomeState extends State<LexiCoreHome>
 
   List<Widget> _buildAmbientOrbs() {
     return [
+      // Purple orb — top right
       Positioned(
-        top: -100,
-        right: -50,
+        top: -80,
+        right: -30,
+        child: Container(
+          width: 350,
+          height: 350,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            gradient: RadialGradient(
+              colors: [
+                LiquidGlassTheme.orbPurple.withValues(alpha: 0.25),
+                LiquidGlassTheme.orbPurple.withValues(alpha: 0.08),
+                Colors.transparent,
+              ],
+              stops: const [0.0, 0.5, 1.0],
+            ),
+          ),
+        ).animate(onPlay: (c) => c.repeat(reverse: true))
+         .scale(begin: const Offset(0.9, 0.9), end: const Offset(1.15, 1.15), duration: 4000.ms)
+         .moveX(begin: 0, end: 20, duration: 6000.ms),
+      ),
+      // Cyan orb — bottom left
+      Positioned(
+        bottom: -60,
+        left: -40,
         child: Container(
           width: 300,
           height: 300,
@@ -426,17 +437,20 @@ class _LexiCoreHomeState extends State<LexiCoreHome>
             shape: BoxShape.circle,
             gradient: RadialGradient(
               colors: [
-                LiquidGlassTheme.accentPrimary.withValues(alpha: 0.08),
+                LiquidGlassTheme.orbCyan.withValues(alpha: 0.20),
+                LiquidGlassTheme.orbCyan.withValues(alpha: 0.06),
                 Colors.transparent,
               ],
+              stops: const [0.0, 0.5, 1.0],
             ),
           ),
         ).animate(onPlay: (c) => c.repeat(reverse: true))
-         .scale(begin: const Offset(0.9, 0.9), end: const Offset(1.1, 1.1), duration: 4000.ms),
+         .scale(begin: const Offset(1.1, 1.1), end: const Offset(0.85, 0.85), duration: 5000.ms),
       ),
+      // Pink orb — center left
       Positioned(
-        bottom: -80,
-        left: -60,
+        top: 200,
+        left: 60,
         child: Container(
           width: 250,
           height: 250,
@@ -444,31 +458,53 @@ class _LexiCoreHomeState extends State<LexiCoreHome>
             shape: BoxShape.circle,
             gradient: RadialGradient(
               colors: [
-                LiquidGlassTheme.accentSecondary.withValues(alpha: 0.06),
+                LiquidGlassTheme.orbPink.withValues(alpha: 0.18),
+                LiquidGlassTheme.orbPink.withValues(alpha: 0.05),
                 Colors.transparent,
               ],
+              stops: const [0.0, 0.5, 1.0],
             ),
           ),
         ).animate(onPlay: (c) => c.repeat(reverse: true))
-         .scale(begin: const Offset(1.1, 1.1), end: const Offset(0.9, 0.9), duration: 5000.ms),
+         .scale(begin: const Offset(0.95, 0.95), end: const Offset(1.1, 1.1), duration: 3500.ms),
       ),
+      // Blue orb — top left
       Positioned(
-        top: 200,
-        left: 100,
+        top: -30,
+        left: -50,
         child: Container(
-          width: 200,
-          height: 200,
+          width: 280,
+          height: 280,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
             gradient: RadialGradient(
               colors: [
-                LiquidGlassTheme.accentTertiary.withValues(alpha: 0.04),
+                LiquidGlassTheme.orbBlue.withValues(alpha: 0.15),
                 Colors.transparent,
               ],
             ),
           ),
         ).animate(onPlay: (c) => c.repeat(reverse: true))
-         .scale(begin: const Offset(0.95, 0.95), end: const Offset(1.05, 1.05), duration: 3000.ms),
+         .scale(begin: const Offset(1.0, 1.0), end: const Offset(1.12, 1.12), duration: 4500.ms),
+      ),
+      // Amber orb — bottom right
+      Positioned(
+        bottom: 80,
+        right: -30,
+        child: Container(
+          width: 220,
+          height: 220,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            gradient: RadialGradient(
+              colors: [
+                LiquidGlassTheme.orbAmber.withValues(alpha: 0.12),
+                Colors.transparent,
+              ],
+            ),
+          ),
+        ).animate(onPlay: (c) => c.repeat(reverse: true))
+         .scale(begin: const Offset(1.05, 1.05), end: const Offset(0.92, 0.92), duration: 3800.ms),
       ),
     ];
   }
