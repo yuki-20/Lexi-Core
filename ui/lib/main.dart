@@ -16,13 +16,17 @@ import 'widgets/stats_overlay.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Window.initialize();
-  await Window.setEffect(
-    effect: WindowEffect.acrylic,
-    color: const Color(0xCC0A0A12),
-    dark: true,
-  );
-  await Window.setWindowBackgroundColorToClear();
+  try {
+    await Window.initialize();
+    await Window.setEffect(
+      effect: WindowEffect.acrylic,
+      color: const Color(0xCC0A0A12),
+      dark: true,
+    );
+    await Window.setWindowBackgroundColorToClear();
+  } catch (_) {
+    // Acrylic may not be available — app still works without it
+  }
   runApp(const LexiCoreApp());
 }
 

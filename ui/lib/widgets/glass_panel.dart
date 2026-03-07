@@ -1,8 +1,7 @@
 /// LexiCore — Glass Panel Widget
-/// Frosted glass container with specular edge lighting and cursor glow.
+/// Frosted glass container with animated borders and hover effects.
 library;
 
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import '../theme/liquid_glass_theme.dart';
 
@@ -27,7 +26,6 @@ class GlassPanel extends StatefulWidget {
 }
 
 class _GlassPanelState extends State<GlassPanel> {
-  Offset _cursorPos = Offset.zero;
   bool _isHovering = false;
 
   @override
@@ -35,17 +33,28 @@ class _GlassPanelState extends State<GlassPanel> {
     return MouseRegion(
       onEnter: (_) => setState(() => _isHovering = true),
       onExit: (_) => setState(() => _isHovering = false),
-      onHover: (event) => setState(() => _cursorPos = event.localPosition),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
         curve: Curves.easeOut,
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(widget.borderRadius),
+          // Glass fill — semi-transparent dark surface
+          color: const Color(0x1AFFFFFF),
           border: Border.all(
             color: _isHovering
                 ? LiquidGlassTheme.glassHighlight.withValues(alpha: 0.25)
                 : LiquidGlassTheme.glassBorder,
             width: 1,
+          ),
+          // Specular top edge illusion via gradient
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              const Color(0x20FFFFFF),
+              const Color(0x0DFFFFFF),
+              const Color(0x08FFFFFF),
+            ],
           ),
           boxShadow: [
             BoxShadow(
@@ -53,66 +62,17 @@ class _GlassPanelState extends State<GlassPanel> {
               blurRadius: 30,
               spreadRadius: -5,
             ),
+            // Inner glow
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.3),
+              blurRadius: 20,
+              spreadRadius: -8,
+            ),
           ],
         ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(widget.borderRadius),
-          child: BackdropFilter(
-            filter: ImageFilter.blur(
-              sigmaX: widget.blur,
-              sigmaY: widget.blur,
-            ),
-            child: Stack(
-              children: [
-                // Base glass fill
-                Container(
-                  decoration: BoxDecoration(
-                    color: LiquidGlassTheme.glassFill,
-                    borderRadius: BorderRadius.circular(widget.borderRadius),
-                  ),
-                ),
-                // Specular top edge shine
-                Positioned(
-                  top: 0,
-                  left: 0,
-                  right: 0,
-                  height: 1,
-                  child: Container(
-                    decoration: const BoxDecoration(
-                      gradient: LiquidGlassTheme.specularBorder,
-                    ),
-                  ),
-                ),
-                // Cursor glow
-                if (widget.enableCursorGlow && _isHovering)
-                  Positioned.fill(
-                    child: IgnorePointer(
-                      child: Container(
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(widget.borderRadius),
-                          gradient: RadialGradient(
-                            center: Alignment(
-                              (_cursorPos.dx / (context.size?.width ?? 300)) * 2 - 1,
-                              (_cursorPos.dy / (context.size?.height ?? 200)) * 2 - 1,
-                            ),
-                            radius: 0.6,
-                            colors: [
-                              LiquidGlassTheme.accentPrimary.withValues(alpha: 0.12),
-                              Colors.transparent,
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                // Content
-                Padding(
-                  padding: widget.padding,
-                  child: widget.child,
-                ),
-              ],
-            ),
-          ),
+        child: Padding(
+          padding: widget.padding,
+          child: widget.child,
         ),
       ),
     );

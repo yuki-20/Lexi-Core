@@ -85,7 +85,7 @@ class LexiCoreEngine:
         elapsed = time.perf_counter() - t0
         self._ready = True
 
-        print(f"[✓] Loaded {len(words):,} words in {elapsed:.2f}s")
+        print(f"[OK] Loaded {len(words):,} words in {elapsed:.2f}s")
         print(f"    Trie: {self.trie.size:,} | Bloom: OK | Inverted Index: {self.inverted_index.term_count:,} terms")
 
     @property
