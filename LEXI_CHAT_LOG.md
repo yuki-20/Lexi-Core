@@ -924,6 +924,84 @@ Chat log committed: `bbebe73`, pushed `213099f..bbebe73`.
 
 ### 🤖 Response
 
-Rewrote all session entries from summaries to full verbatim prompts and detailed responses with complete error tracebacks, code diffs, and step-by-step fix descriptions.
+**Step 1 — Read current chat log:**
+
+Viewed `LEXI_CHAT_LOG.md` lines 640-716. Found the two session entries (02:10 debug pass and 02:27 sidebar redesign) were written as condensed summaries — bullet points instead of full step-by-step content.
+
+**Step 2 — Rewrote sessions with full verbatim content:**
+
+Replaced ~76 lines of summary content with ~165 lines of full detailed content:
+
+- **Session 02:00 (debug pass):** Expanded from 24-line bullet summary to full verbatim with:
+  - All 5 step headers (Backend API Testing → More tests → Remaining endpoints → Quiz fix → Flutter build)
+  - Complete error tracebacks for all 4 crashes (projects `_conn()`, save `source_file`, quiz `correct_index`, WOTD Map cast)
+  - Code snippets showing exact fixes applied
+  - Full API test result tables with status codes
+  - Git commit and push output
+
+- **Session 02:27 (sidebar redesign):** Expanded from 32-line summary to full verbatim with:
+  - 6 step headers (Quiz fix → Sidebar rewrite → Home rewrite → First launch crash → Quiz persistent crash → Final cold start)
+  - Complete sidebar implementation details (MouseRegion, AnimatedCrossFade, AnimatedContainer widths)
+  - All 8 welcome messages listed
+  - Full nav overflow crash traceback and fix
+  - Backend log showing clean 200s
+
+**Step 3 — Committed and pushed:**
+
+```
+git add LEXI_CHAT_LOG.md
+git commit -m "docs: rewrite chat log with full verbatim prompts and responses (not summaries)"
+git push origin main
+```
+
+Result: `fc22215` — 255 insertions, 41 deletions. Pushed `bbebe73..fc22215`.
+
+---
+
+## Session — 2026-03-08 02:44
+
+### 🧑 Prompt
+
+> okay now fix the agentic workflow to
+> auto upload log after every chat ( full details everything )
+> skip the browser taking screenshot as this is a windows app
+
+### 🤖 Response
+
+**Step 1 — Read existing workflow:**
+
+Viewed `.agents/workflows/upload-chatlog.md` (54 lines). Found it already had the basic structure (session header, prompt, response format) but was missing:
+- Explicit rule to skip browser screenshots
+- Mandatory list of what to log (tracebacks, code, commands, status codes)
+- `// turbo` annotation on all git commands (only had it on step 4 and 6)
+- Clear instruction that it's a Windows desktop app
+
+**Step 2 — Rewrote workflow:**
+
+Updated `.agents/workflows/upload-chatlog.md` with:
+- **When to trigger:** "After EVERY chat interaction — not just at end of session"
+- **Mandatory log content:** Every step numbered, file paths with line numbers, complete error tracebacks, code snippets, terminal commands + output, API status codes, build timing, crash root causes, git hashes
+- **Explicit prohibitions:**
+  - ❌ Do NOT summarize
+  - ❌ Do NOT abbreviate errors
+  - ❌ Do NOT skip intermediate steps
+  - ❌ Do NOT take browser screenshots (Windows desktop app)
+  - ❌ Do NOT use browser_subagent for verification
+- **All git commands marked `// turbo`** for auto-run (step 4, 5, 6)
+- **Prompt format:** Exact user text in blockquote (`>`)
+
+**Step 3 — Committed and pushed workflow:**
+
+```
+git add .agents/workflows/upload-chatlog.md
+git commit -m "chore: update upload-chatlog workflow -- full verbatim, skip browser, turbo git"
+git push origin main
+```
+
+Result: `c2aa30f` — 42 insertions, 14 deletions. Pushed `fc22215..c2aa30f`.
+
+**Step 4 — Ran the updated workflow for this session:**
+
+Appended this full verbatim entry to `LEXI_CHAT_LOG.md` and pushed.
 
 ---
