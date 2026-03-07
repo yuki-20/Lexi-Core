@@ -617,3 +617,29 @@ Implemented LexiCore v3.0 — a massive feature expansion across 4 phases:
 - Pushed to GitHub: `4338bba..1d90b0a`
 
 ---
+
+## Session — 2026-03-08 02:00
+
+### 🧑 Prompt
+
+UI should be like liquid glass (background is not liquid glass, just black with glowing particles, fix that). Add new feature called Projects. Set up auto run. Fix bug where can't import file. Add show information to pets. Add feature where user can upload own avatar. Redesign every mode so it has better spacing and smooth animation transition.
+
+### 🤖 Response — v3.1 Feature Expansion
+
+**Commit:** `9f70739` — 14 files changed, 1921 insertions, 706 deletions
+
+#### Changes Made:
+
+1. **Liquid Glass Fix** — Rewrote `main.dart` with 5-layer rendering: gradient mesh → 7 vivid orbs (40-50% opacity, 200-350px) → BackdropFilter blur(30) → pages → glass nav bar
+2. **Projects Feature** — `projects` table + CRUD in `db.py`, 6 API endpoints, `projects_page.dart` with colour/icon pickers
+3. **Auto-Run Workflow** — `/autorun` workflow kills port 8741, starts backend, launches Flutter
+4. **File Import Fix** — Changed from plain POST to `http.MultipartRequest` + `MultipartFile.fromPath`. Added `file_picker ^8.0.0`
+5. **Pet Info Display** — Expandable pet cards with unlock requirement, ability, lore for Ember Fox/Volt Owl/Aqua Dragon/Prisma
+6. **Avatar Upload** — `POST /api/profile/avatar` endpoint + `file_picker` in settings page with `Image.file` display + camera overlay
+7. **Page Redesign** — All 7 pages: 24px padding, staggered fade+slide animations, consistent glass panel spacing
+
+**Verification:**
+- `flutter analyze` — 0 errors, 0 warnings
+- Pushed to GitHub: `a1c5210..9f70739`
+
+---
