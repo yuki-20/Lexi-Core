@@ -1,5 +1,10 @@
-/// LexiCore — Performance & Pet Collection Page (v3.1)
-/// Analytics dashboard with expandable pet info cards.
+/// LexiCore — Performance & Analytics Page (v5.0)
+/// Professional analytics dashboard with:
+///   - XP level overview with progress bar
+///   - Quick stats (Dictionary, Streak, EXP — moved from home)
+///   - Quiz accuracy analysis
+///   - Word mastery badges
+///   - Pet collection showcase
 library;
 
 import 'package:flutter/material.dart';
@@ -17,46 +22,29 @@ class PerformancePage extends StatefulWidget {
 
 class _PerformancePageState extends State<PerformancePage> {
   final _engine = EngineService();
-  Map<String, dynamic> _perf = {};
-  List<Map<String, dynamic>> _quizHistory = [];
-  List<Map<String, dynamic>> _pets = [];
-  int? _expandedPetIndex;
+  bool _loading = true;
 
-  // Pet detailed info
-  static const _petInfo = {
-    'ember_fox': {
-      'emoji': '🦊',
-      'name': 'Ember Fox',
-      'desc': 'A swift and cunning companion born from the flames of dedication.',
-      'unlock': '7-day study streak',
-      'ability': 'Grants +10% bonus EXP on all quiz completions',
-      'lore': 'Ember Fox appears to those who show unwavering daily commitment. Its fiery tail leaves a trail of knowledge wherever it goes.',
-    },
-    'volt_owl': {
-      'emoji': '🦉',
-      'name': 'Volt Owl',
-      'desc': 'A wise guardian that watches over your learning journey.',
-      'unlock': '30-day study streak',
-      'ability': 'Unlocks quiz hints — reveals one incorrect option per question',
-      'lore': 'Volt Owl has witnessed a thousand learners grow. Its electric feathers crackle with accumulated wisdom from ages past.',
-    },
-    'aqua_dragon': {
-      'emoji': '🐉',
-      'name': 'Aqua Dragon',
-      'desc': 'An ancient beast of immense knowledge and power.',
-      'unlock': '100-day study streak',
-      'ability': 'Doubles streak EXP gains and unlocks advanced analytics',
-      'lore': 'Aqua Dragon dwells in the deepest library ocean. Only the most persistent scholars can summon it from the depths.',
-    },
-    'prisma': {
-      'emoji': '🦄',
-      'name': 'Prisma',
-      'desc': 'A mythical creature of pure light — the ultimate companion.',
-      'unlock': 'Score 100% on 3 different quizzes',
-      'ability': 'Adds rainbow shimmer effect to all glass panels + triples EXP',
-      'lore': 'Prisma exists between dimensions of perfect knowledge. It chooses only those who have proven mastery beyond doubt.',
-    },
-  };
+  // Stats
+  int _dictSize = 0;
+  int _streakDays = 0;
+  int _totalExp = 0;
+  int _wordsSaved = 0;
+  int _searchCount = 0;
+
+  // XP / Level
+  int _level = 1;
+  String _levelTitle = 'Novice';
+  double _xpProgress = 0.0;
+  int _xpIntoLevel = 0;
+  int _xpForNext = 100;
+
+  // Quiz
+  int _quizzesTaken = 0;
+  int _quizCorrect = 0;
+  int _quizTotal = 0;
+
+  // Pets
+  List<Map<String, dynamic>> _pets = [];
 
   @override
   void initState() {
@@ -65,389 +53,420 @@ class _PerformancePageState extends State<PerformancePage> {
   }
 
   Future<void> _loadData() async {
-    final perf = await _engine.getPerformance();
-    final history = await _engine.getQuizHistory();
-    final pets = await _engine.getAllPets();
-    await _engine.checkPetUnlocks();
-    if (mounted) {
-      setState(() {
-        _perf = perf;
-        _quizHistory = history;
-        _pets = pets;
-      });
+    try {
+      final stats = await _engine.getStats();
+      final performance = await _engine.getPerformance();
+      final xpStatus = await _engine.getXpStatus();
+      final pets = await _engine.getAllPets();
+      final saved = await _engine.getSavedWords();
+
+      if (mounted) {
+        final learning = stats['learning'] as Map? ?? {};
+        final quizPerf = performance['quiz'] as Map? ?? {};
+
+        setState(() {
+          _dictSize = (stats['dictionary_size'] as num?)?.toInt() ?? 0;
+          _streakDays = (learning['streak_days'] as num?)?.toInt() ?? 0;
+          _totalExp = (learning['total_exp'] as num?)?.toInt() ?? 0;
+          _wordsSaved = saved.length;
+          _searchCount = (performance['total_searches'] as num?)?.toInt() ?? 0;
+
+          _level = (xpStatus['level'] as num?)?.toInt() ?? 1;
+          _levelTitle = xpStatus['title']?.toString() ?? 'Novice';
+          _xpProgress = (xpStatus['progress'] as num?)?.toDouble() ?? 0.0;
+          _xpIntoLevel = (xpStatus['xp_into_level'] as num?)?.toInt() ?? 0;
+          _xpForNext = (xpStatus['xp_for_next'] as num?)?.toInt() ?? 100;
+
+          _quizzesTaken = (quizPerf['total_quizzes'] as num?)?.toInt() ?? 0;
+          _quizCorrect = (quizPerf['correct_answers'] as num?)?.toInt() ?? 0;
+          _quizTotal = (quizPerf['total_answers'] as num?)?.toInt() ?? 0;
+
+          _pets = List<Map<String, dynamic>>.from(pets);
+          _loading = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _loading = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final quiz = _perf['quiz'] as Map<String, dynamic>? ?? {};
-    final cards = _perf['flashcards'] as Map<String, dynamic>? ?? {};
+    if (_loading) {
+      return const Center(child: CircularProgressIndicator(
+        color: LiquidGlassTheme.accentPrimary,
+      ));
+    }
 
     return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(24, 20, 24, 120),
+      padding: const EdgeInsets.fromLTRB(32, 20, 32, 40),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Performance', style: LiquidGlassTheme.heading)
+          // ── Header ──
+          Text('Performance Analytics', style: LiquidGlassTheme.heading)
               .animate().fadeIn(duration: 400.ms),
-          const SizedBox(height: 24),
-
-          // ── Stats Grid ──
-          Row(
-            children: [
-              _StatCard(
-                icon: Icons.local_fire_department_rounded,
-                label: 'Streak',
-                value: '${_perf['streak_days'] ?? 0}',
-                unit: 'days',
-                color: Colors.orangeAccent,
-              ),
-              const SizedBox(width: 14),
-              _StatCard(
-                icon: Icons.bolt_rounded,
-                label: 'Total EXP',
-                value: '${_perf['total_exp'] ?? 0}',
-                unit: 'xp',
-                color: LiquidGlassTheme.accentPrimary,
-              ),
-            ],
-          ).animate().fadeIn(delay: 150.ms, duration: 400.ms).slideY(begin: 0.05, end: 0),
-          const SizedBox(height: 14),
-          Row(
-            children: [
-              _StatCard(
-                icon: Icons.search_rounded,
-                label: 'Searches',
-                value: '${_perf['total_searches'] ?? 0}',
-                unit: 'total',
-                color: LiquidGlassTheme.accentSecondary,
-              ),
-              const SizedBox(width: 14),
-              _StatCard(
-                icon: Icons.bookmark_rounded,
-                label: 'Saved',
-                value: '${_perf['total_saved'] ?? 0}',
-                unit: 'words',
-                color: LiquidGlassTheme.accentTertiary,
-              ),
-            ],
-          ).animate().fadeIn(delay: 250.ms, duration: 400.ms).slideY(begin: 0.05, end: 0),
-
+          const SizedBox(height: 6),
+          Text('Track your learning journey', style: LiquidGlassTheme.bodySmall)
+              .animate().fadeIn(delay: 100.ms),
           const SizedBox(height: 28),
 
-          // ── Quiz Performance ──
+          // ── Level Overview ──
           GlassPanel(
-            padding: const EdgeInsets.all(22),
+            padding: const EdgeInsets.all(24),
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Quiz Performance', style: LiquidGlassTheme.headingSm),
-                const SizedBox(height: 18),
                 Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceAround,
                   children: [
-                    _MiniStat(label: 'Quizzes', value: '${quiz['total_quizzes'] ?? 0}'),
-                    _MiniStat(label: 'Avg', value: '${(quiz['avg_score'] ?? 0).toStringAsFixed(0)}%'),
-                    _MiniStat(label: 'Best', value: '${(quiz['best_score'] ?? 0).toStringAsFixed(0)}%'),
-                    _MiniStat(label: 'Accuracy', value:
-                      quiz['total_questions'] != null && quiz['total_questions'] > 0
-                        ? '${((quiz['total_correct'] / quiz['total_questions']) * 100).toStringAsFixed(0)}%'
-                        : '0%'
+                    // Level circle
+                    Container(
+                      width: 64, height: 64,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [
+                            LiquidGlassTheme.accentPrimary,
+                            LiquidGlassTheme.accentSecondary,
+                          ],
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: LiquidGlassTheme.accentPrimary.withValues(alpha: 0.3),
+                            blurRadius: 20,
+                            spreadRadius: -5,
+                          ),
+                        ],
+                      ),
+                      child: Center(
+                        child: Text(
+                          '$_level',
+                          style: const TextStyle(
+                            fontSize: 24, fontWeight: FontWeight.w900,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 18),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(_levelTitle, style: LiquidGlassTheme.headingSm),
+                          const SizedBox(height: 6),
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(4),
+                            child: LinearProgressIndicator(
+                              value: _xpProgress,
+                              minHeight: 8,
+                              backgroundColor: Colors.white.withValues(alpha: 0.08),
+                              color: LiquidGlassTheme.accentPrimary,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            '$_xpIntoLevel / $_xpForNext XP to Level ${_level + 1}',
+                            style: LiquidGlassTheme.bodySmall.copyWith(fontSize: 11),
+                          ),
+                        ],
+                      ),
                     ),
                   ],
                 ),
               ],
             ),
-          ).animate().fadeIn(delay: 350.ms, duration: 400.ms).slideY(begin: 0.05, end: 0),
+          ).animate().fadeIn(delay: 200.ms, duration: 500.ms)
+           .slideY(begin: 0.04, end: 0),
 
-          const SizedBox(height: 16),
+          const SizedBox(height: 20),
 
-          // ── Flashcard Stats ──
+          // ── Quick Stats Grid (moved from Home) ──
+          Row(
+            children: [
+              Expanded(child: _StatTile(
+                icon: Icons.menu_book_rounded,
+                iconColor: LiquidGlassTheme.accentPrimary,
+                value: '$_dictSize',
+                label: 'Dictionary',
+                delay: 300,
+              )),
+              const SizedBox(width: 12),
+              Expanded(child: _StatTile(
+                icon: Icons.local_fire_department,
+                iconColor: Colors.orangeAccent,
+                value: '${_streakDays}d',
+                label: 'Streak',
+                delay: 350,
+              )),
+              const SizedBox(width: 12),
+              Expanded(child: _StatTile(
+                icon: Icons.bolt_rounded,
+                iconColor: LiquidGlassTheme.accentSecondary,
+                value: '$_totalExp',
+                label: 'Total XP',
+                delay: 400,
+              )),
+            ],
+          ),
+
+          const SizedBox(height: 12),
+
+          Row(
+            children: [
+              Expanded(child: _StatTile(
+                icon: Icons.bookmark_rounded,
+                iconColor: const Color(0xFF69F0AE),
+                value: '$_wordsSaved',
+                label: 'Saved Words',
+                delay: 450,
+              )),
+              const SizedBox(width: 12),
+              Expanded(child: _StatTile(
+                icon: Icons.search_rounded,
+                iconColor: const Color(0xFF40C4FF),
+                value: '$_searchCount',
+                label: 'Searches',
+                delay: 500,
+              )),
+              const SizedBox(width: 12),
+              Expanded(child: _StatTile(
+                icon: Icons.quiz_rounded,
+                iconColor: const Color(0xFFFF4081),
+                value: '$_quizzesTaken',
+                label: 'Quizzes',
+                delay: 550,
+              )),
+            ],
+          ),
+
+          const SizedBox(height: 28),
+
+          // ── Quiz Performance Analysis ──
+          Text('Quiz Performance', style: LiquidGlassTheme.label)
+              .animate().fadeIn(delay: 600.ms),
+          const SizedBox(height: 12),
           GlassPanel(
-            padding: const EdgeInsets.all(22),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Flashcard Stats', style: LiquidGlassTheme.headingSm),
-                const SizedBox(height: 18),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceAround,
-                  children: [
-                    _MiniStat(label: 'Cards', value: '${cards['total_cards'] ?? 0}'),
-                    _MiniStat(label: 'Reviews', value: '${cards['total_reviews'] ?? 0}'),
-                    _MiniStat(label: 'Mastery', value: '${(cards['avg_mastery'] ?? 0).toStringAsFixed(1)}/5'),
-                  ],
-                ),
-              ],
-            ),
-          ).animate().fadeIn(delay: 450.ms, duration: 400.ms).slideY(begin: 0.05, end: 0),
+            padding: const EdgeInsets.all(24),
+            child: _quizTotal > 0
+                ? Column(
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Column(
+                              children: [
+                                Text(
+                                  '${(_quizCorrect / _quizTotal * 100).toStringAsFixed(1)}%',
+                                  style: LiquidGlassTheme.heading.copyWith(
+                                    fontSize: 36,
+                                    color: _quizCorrect / _quizTotal >= 0.7
+                                        ? const Color(0xFF69F0AE)
+                                        : Colors.orangeAccent,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text('Accuracy', style: LiquidGlassTheme.bodySmall),
+                              ],
+                            ),
+                          ),
+                          Container(
+                            width: 1, height: 50,
+                            color: LiquidGlassTheme.glassBorder,
+                          ),
+                          Expanded(
+                            child: Column(
+                              children: [
+                                Text(
+                                  '$_quizCorrect / $_quizTotal',
+                                  style: LiquidGlassTheme.headingSm,
+                                ),
+                                const SizedBox(height: 4),
+                                Text('Correct Answers', style: LiquidGlassTheme.bodySmall),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      // Accuracy bar
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(6),
+                        child: LinearProgressIndicator(
+                          value: _quizTotal > 0 ? _quizCorrect / _quizTotal : 0,
+                          minHeight: 12,
+                          backgroundColor: Colors.white.withValues(alpha: 0.06),
+                          color: _quizCorrect / _quizTotal >= 0.7
+                              ? const Color(0xFF69F0AE)
+                              : Colors.orangeAccent,
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            _quizCorrect / _quizTotal >= 0.9
+                                ? '🏆 Outstanding!'
+                                : _quizCorrect / _quizTotal >= 0.7
+                                    ? '🎉 Great job!'
+                                    : _quizCorrect / _quizTotal >= 0.5
+                                        ? '👍 Keep going!'
+                                        : '💪 Room to improve',
+                            style: LiquidGlassTheme.bodySmall,
+                          ),
+                          Text(
+                            '$_quizzesTaken quizzes taken',
+                            style: LiquidGlassTheme.bodySmall,
+                          ),
+                        ],
+                      ),
+                    ],
+                  )
+                : Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(20),
+                      child: Column(
+                        children: [
+                          const Text('📝', style: TextStyle(fontSize: 36)),
+                          const SizedBox(height: 12),
+                          Text('No quizzes taken yet',
+                            style: LiquidGlassTheme.body),
+                          const SizedBox(height: 4),
+                          Text('Take your first quiz to see analytics here',
+                            style: LiquidGlassTheme.bodySmall),
+                        ],
+                      ),
+                    ),
+                  ),
+          ).animate().fadeIn(delay: 650.ms, duration: 500.ms)
+           .slideY(begin: 0.04, end: 0),
 
           const SizedBox(height: 28),
 
           // ── Pet Collection ──
-          Row(
-            children: [
-              Text('Pet Collection', style: LiquidGlassTheme.headingSm),
-              const SizedBox(width: 8),
-              Text('(${_pets.where((p) => p['unlocked'] == true).length}/${_petInfo.length})',
-                style: LiquidGlassTheme.bodySmall),
-            ],
-          ).animate().fadeIn(delay: 550.ms),
-          const SizedBox(height: 14),
-
-          ...(_pets.asMap().entries.map((entry) {
+          Text('Pet Collection', style: LiquidGlassTheme.label)
+              .animate().fadeIn(delay: 700.ms),
+          const SizedBox(height: 12),
+          ..._pets.asMap().entries.map((entry) {
+            final i = entry.key;
             final pet = entry.value;
-            final petId = pet['id'] ?? '';
-            final info = _petInfo[petId] ?? {};
             final unlocked = pet['unlocked'] == true;
-            final isExpanded = _expandedPetIndex == entry.key;
-            final emoji = info['emoji'] ?? '🐾';
+            const petEmojis = {
+              'ember_fox': '🦊', 'volt_owl': '🦉',
+              'aqua_dragon': '🐉', 'prisma': '🦄',
+            };
+            final emoji = petEmojis[pet['id']] ?? '🐾';
 
             return Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: GestureDetector(
-                onTap: () => setState(() {
-                  _expandedPetIndex = isExpanded ? null : entry.key;
-                }),
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 300),
-                  curve: Curves.easeOutCubic,
-                  child: GlassPanel(
-                    padding: const EdgeInsets.all(18),
-                    borderRadius: LiquidGlassTheme.borderRadiusSm,
-                    child: Column(
-                      children: [
-                        // Pet header row
-                        Row(
-                          children: [
-                            Container(
-                              width: 56, height: 56,
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(16),
-                                gradient: unlocked
-                                    ? LinearGradient(colors: [
-                                        LiquidGlassTheme.accentPrimary.withValues(alpha: 0.3),
-                                        LiquidGlassTheme.accentSecondary.withValues(alpha: 0.2),
-                                      ])
-                                    : null,
-                                color: unlocked ? null : LiquidGlassTheme.glassFill,
-                              ),
-                              child: Center(
-                                child: Text(emoji, style: TextStyle(fontSize: unlocked ? 30 : 22)),
-                              ),
-                            ),
-                            const SizedBox(width: 16),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    info['name'] ?? pet['name'] ?? '',
-                                    style: LiquidGlassTheme.headingSm.copyWith(
-                                      fontSize: 16,
-                                      color: unlocked ? LiquidGlassTheme.textPrimary : LiquidGlassTheme.textMuted,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    info['desc'] ?? '',
-                                    style: LiquidGlassTheme.bodySmall.copyWith(
-                                      color: unlocked ? LiquidGlassTheme.textSecondary : LiquidGlassTheme.textMuted,
-                                    ),
-                                    maxLines: isExpanded ? null : 1,
-                                    overflow: isExpanded ? null : TextOverflow.ellipsis,
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            if (unlocked)
-                              const Icon(Icons.check_circle, color: Colors.greenAccent, size: 22)
-                            else
-                              Icon(Icons.lock_rounded, color: LiquidGlassTheme.textMuted.withValues(alpha: 0.5), size: 20),
-                            const SizedBox(width: 4),
-                            AnimatedRotation(
-                              turns: isExpanded ? 0.5 : 0,
-                              duration: const Duration(milliseconds: 250),
-                              child: const Icon(Icons.expand_more, color: LiquidGlassTheme.textMuted, size: 20),
-                            ),
-                          ],
+              padding: const EdgeInsets.only(bottom: 10),
+              child: GlassPanel(
+                padding: const EdgeInsets.all(16),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 48, height: 48,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(14),
+                        gradient: unlocked
+                            ? LinearGradient(colors: [
+                                LiquidGlassTheme.accentPrimary.withValues(alpha: 0.2),
+                                LiquidGlassTheme.accentSecondary.withValues(alpha: 0.1),
+                              ])
+                            : null,
+                        color: unlocked ? null : Colors.white.withValues(alpha: 0.05),
+                      ),
+                      child: Center(
+                        child: Text(
+                          unlocked ? emoji : '🔒',
+                          style: TextStyle(fontSize: unlocked ? 26 : 20),
                         ),
-
-                        // Expanded info
-                        AnimatedCrossFade(
-                          firstChild: const SizedBox.shrink(),
-                          secondChild: Padding(
-                            padding: const EdgeInsets.only(top: 16),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Divider(color: LiquidGlassTheme.glassBorder, height: 1),
-                                const SizedBox(height: 14),
-
-                                _PetInfoRow(
-                                  icon: Icons.lock_open_rounded,
-                                  label: 'Unlock Requirement',
-                                  value: info['unlock'] ?? '',
-                                  color: Colors.orangeAccent,
-                                ),
-                                const SizedBox(height: 10),
-                                _PetInfoRow(
-                                  icon: Icons.auto_awesome_rounded,
-                                  label: 'Ability',
-                                  value: info['ability'] ?? '',
-                                  color: LiquidGlassTheme.accentPrimary,
-                                ),
-                                const SizedBox(height: 10),
-                                _PetInfoRow(
-                                  icon: Icons.auto_stories_rounded,
-                                  label: 'Lore',
-                                  value: info['lore'] ?? '',
-                                  color: LiquidGlassTheme.accentSecondary,
-                                ),
-                              ],
-                            ),
-                          ),
-                          crossFadeState: isExpanded
-                              ? CrossFadeState.showSecond
-                              : CrossFadeState.showFirst,
-                          duration: const Duration(milliseconds: 300),
-                        ),
-                      ],
+                      ),
                     ),
-                  ),
-                ),
-              ).animate().fadeIn(delay: Duration(milliseconds: 600 + entry.key * 100), duration: 400.ms),
-            );
-          })),
-
-          // ── Quiz History ──
-          if (_quizHistory.isNotEmpty) ...[
-            const SizedBox(height: 24),
-            Text('Recent Quizzes', style: LiquidGlassTheme.headingSm)
-                .animate().fadeIn(delay: const Duration(milliseconds: 900)),
-            const SizedBox(height: 12),
-            ..._quizHistory.take(5).toList().asMap().entries.map((entry) {
-              final q = entry.value;
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 10),
-                child: GlassPanel(
-                  padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
-                  borderRadius: LiquidGlassTheme.borderRadiusSm,
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 40, height: 40,
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(12),
-                          color: ((q['score_pct'] ?? 0) >= 80 ? Colors.greenAccent : Colors.orangeAccent)
-                              .withValues(alpha: 0.12),
-                        ),
-                        child: Center(
-                          child: Text(
-                            '${(q['score_pct'] ?? 0).toStringAsFixed(0)}%',
-                            style: LiquidGlassTheme.label.copyWith(
-                              color: (q['score_pct'] ?? 0) >= 80 ? Colors.greenAccent : Colors.orangeAccent,
-                              fontSize: 12,
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            pet['name']?.toString() ?? 'Unknown',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: unlocked
+                                  ? LiquidGlassTheme.textPrimary
+                                  : LiquidGlassTheme.textMuted,
                             ),
                           ),
-                        ),
-                      ),
-                      const SizedBox(width: 14),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              '${q['correct']}/${q['total_q']} correct',
-                              style: LiquidGlassTheme.body,
+                          const SizedBox(height: 2),
+                          Text(
+                            pet['description']?.toString() ?? (unlocked ? 'Unlocked!' : 'Locked'),
+                            style: LiquidGlassTheme.bodySmall.copyWith(
+                              fontSize: 11,
+                              color: LiquidGlassTheme.textMuted,
                             ),
-                            Text(
-                              q['taken_at']?.toString().substring(0, 10) ?? '',
-                              style: LiquidGlassTheme.mono,
-                            ),
-                          ],
-                        ),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
                       ),
-                    ],
-                  ),
-                ).animate().fadeIn(delay: Duration(milliseconds: 950 + entry.key * 80), duration: 300.ms),
-              );
-            }),
-          ],
+                    ),
+                    if (unlocked)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(20),
+                          gradient: LinearGradient(colors: [
+                            LiquidGlassTheme.accentPrimary.withValues(alpha: 0.2),
+                            LiquidGlassTheme.accentSecondary.withValues(alpha: 0.15),
+                          ]),
+                        ),
+                        child: const Text('✓ Unlocked', style: TextStyle(
+                          fontSize: 10, fontWeight: FontWeight.w600,
+                          color: LiquidGlassTheme.accentPrimary,
+                        )),
+                      ),
+                  ],
+                ),
+              ).animate().fadeIn(delay: (750 + i * 80).ms, duration: 400.ms)
+               .slideX(begin: 0.03, end: 0),
+            );
+          }),
         ],
       ),
     );
   }
 }
 
-class _StatCard extends StatelessWidget {
+class _StatTile extends StatelessWidget {
   final IconData icon;
-  final String label, value, unit;
-  final Color color;
-  const _StatCard({required this.icon, required this.label, required this.value, required this.unit, required this.color});
+  final Color iconColor;
+  final String value, label;
+  final int delay;
+
+  const _StatTile({
+    required this.icon,
+    required this.iconColor,
+    required this.value,
+    required this.label,
+    required this.delay,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Expanded(
-      child: GlassPanel(
-        padding: const EdgeInsets.all(18),
-        borderRadius: LiquidGlassTheme.borderRadiusSm,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Icon(icon, size: 24, color: color),
-            const SizedBox(height: 10),
-            Text(value, style: LiquidGlassTheme.heading.copyWith(fontSize: 24, color: color)),
-            const SizedBox(height: 2),
-            Text('$label ($unit)', style: LiquidGlassTheme.bodySmall),
-          ],
-        ),
+    return GlassPanel(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        children: [
+          Icon(icon, color: iconColor, size: 22),
+          const SizedBox(height: 10),
+          Text(value, style: LiquidGlassTheme.headingSm.copyWith(fontSize: 22)),
+          const SizedBox(height: 2),
+          Text(label, style: LiquidGlassTheme.bodySmall.copyWith(fontSize: 11)),
+        ],
       ),
-    );
-  }
-}
-
-class _MiniStat extends StatelessWidget {
-  final String label, value;
-  const _MiniStat({required this.label, required this.value});
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Text(value, style: LiquidGlassTheme.headingSm.copyWith(fontSize: 18)),
-        const SizedBox(height: 4),
-        Text(label, style: LiquidGlassTheme.bodySmall),
-      ],
-    );
-  }
-}
-
-class _PetInfoRow extends StatelessWidget {
-  final IconData icon;
-  final String label, value;
-  final Color color;
-  const _PetInfoRow({required this.icon, required this.label, required this.value, required this.color});
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Icon(icon, size: 16, color: color),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(label, style: LiquidGlassTheme.label.copyWith(color: color)),
-              const SizedBox(height: 2),
-              Text(value, style: LiquidGlassTheme.body),
-            ],
-          ),
-        ),
-      ],
-    );
+    ).animate().fadeIn(delay: delay.ms, duration: 400.ms)
+     .slideY(begin: 0.06, end: 0);
   }
 }

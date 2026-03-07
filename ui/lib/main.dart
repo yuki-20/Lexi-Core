@@ -1,5 +1,5 @@
-/// LexiCore Engine v4.0 — Claude-Style Sidebar Layout
-/// Left glass sidebar with vertical navigation + pet companion.
+/// LexiCore Engine v5.0 — Claude-Style Sidebar Layout
+/// Left glass sidebar with vertical navigation, level badge, + pet companion.
 /// Center area with page content over liquid glass background.
 library;
 
@@ -60,10 +60,13 @@ class _LexiCoreShellState extends State<LexiCoreShell>
   // Sidebar hover state
   bool _sidebarExpanded = false;
 
-  // Pet data
+  // Pet + XP data
   final _engine = EngineService();
   Map<String, dynamic>? _activePet;
   int _streakDays = 0;
+  int _level = 1;
+  String _levelTitle = 'Novice';
+  double _xpProgress = 0.0;
 
   static const _orbConfigs = <_OrbConfig>[
     _OrbConfig(Color(0xFF7C4DFF), 280, 0.45, Offset(0.15, 0.20)),
@@ -99,6 +102,7 @@ class _LexiCoreShellState extends State<LexiCoreShell>
     try {
       final pets = await _engine.getAllPets();
       final stats = await _engine.getStats();
+      final xpStatus = await _engine.getXpStatus();
       if (mounted) {
         setState(() {
           _activePet = pets.firstWhere(
@@ -106,6 +110,9 @@ class _LexiCoreShellState extends State<LexiCoreShell>
             orElse: () => <String, dynamic>{},
           );
           _streakDays = (stats['learning'] as Map?)?['streak_days'] ?? 0;
+          _level = (xpStatus['level'] as num?)?.toInt() ?? 1;
+          _levelTitle = xpStatus['title']?.toString() ?? 'Novice';
+          _xpProgress = (xpStatus['progress'] as num?)?.toDouble() ?? 0.0;
         });
       }
     } catch (_) {}
@@ -149,7 +156,7 @@ class _LexiCoreShellState extends State<LexiCoreShell>
 
   @override
   Widget build(BuildContext context) {
-    final sidebarWidth = _sidebarExpanded ? 220.0 : 72.0;
+    final sidebarWidth = _sidebarExpanded ? 220.0 : 76.0;
 
     return Scaffold(
       backgroundColor: LiquidGlassTheme.bgDeep,
@@ -237,13 +244,29 @@ class _LexiCoreShellState extends State<LexiCoreShell>
       margin: const EdgeInsets.fromLTRB(12, 8, 0, 12),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(20),
-        color: LiquidGlassTheme.glassFill,
-        border: Border.all(color: LiquidGlassTheme.glassBorder, width: 0.5),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            const Color(0x1CFFFFFF),
+            const Color(0x0AFFFFFF),
+            const Color(0x06FFFFFF),
+          ],
+        ),
+        border: Border.all(color: LiquidGlassTheme.glassBorder.withValues(alpha: 0.4), width: 0.5),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.2),
+            blurRadius: 30,
+            spreadRadius: -5,
+            offset: const Offset(4, 0),
+          ),
+        ],
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(20),
         child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
+          filter: ImageFilter.blur(sigmaX: 50, sigmaY: 50),
           child: Column(
             children: [
               // ── Logo / Brand ──
@@ -268,6 +291,76 @@ class _LexiCoreShellState extends State<LexiCoreShell>
                   duration: const Duration(milliseconds: 200),
                 ),
               ),
+
+              // ── Level Badge ──
+              if (_sidebarExpanded)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: Column(
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(10),
+                                gradient: LinearGradient(colors: [
+                                  LiquidGlassTheme.accentPrimary.withValues(alpha: 0.3),
+                                  LiquidGlassTheme.accentSecondary.withValues(alpha: 0.2),
+                                ]),
+                              ),
+                              child: Text('Lv.$_level', style: const TextStyle(
+                                fontSize: 9, fontWeight: FontWeight.w700,
+                                color: LiquidGlassTheme.accentPrimary,
+                              )),
+                            ),
+                            const SizedBox(width: 4),
+                            Flexible(
+                              child: Text(_levelTitle, style: const TextStyle(
+                                fontSize: 9, color: LiquidGlassTheme.textMuted,
+                              ), overflow: TextOverflow.ellipsis),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(3),
+                          child: LinearProgressIndicator(
+                            value: _xpProgress,
+                            minHeight: 3,
+                            backgroundColor: Colors.white.withValues(alpha: 0.08),
+                            color: LiquidGlassTheme.accentPrimary,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+              else
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 4),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(8),
+                      gradient: LinearGradient(colors: [
+                        LiquidGlassTheme.accentPrimary.withValues(alpha: 0.3),
+                        LiquidGlassTheme.accentSecondary.withValues(alpha: 0.2),
+                      ]),
+                    ),
+                    child: Text('$_level', style: const TextStyle(
+                      fontSize: 9, fontWeight: FontWeight.w700,
+                      color: LiquidGlassTheme.accentPrimary,
+                    )),
+                  ),
+                ),
 
               Divider(color: LiquidGlassTheme.glassBorder.withValues(alpha: 0.3), height: 1, indent: 12, endIndent: 12),
               const SizedBox(height: 8),
@@ -304,6 +397,7 @@ class _LexiCoreShellState extends State<LexiCoreShell>
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 200),
           curve: Curves.easeOutCubic,
+          clipBehavior: Clip.hardEdge,
           padding: EdgeInsets.symmetric(
             horizontal: _sidebarExpanded ? 14 : 0,
             vertical: 10,
@@ -314,9 +408,11 @@ class _LexiCoreShellState extends State<LexiCoreShell>
                 ? LiquidGlassTheme.accentPrimary.withValues(alpha: 0.15)
                 : Colors.transparent,
           ),
-          child: _sidebarExpanded
-              // ── Expanded: indicator bar + icon + label ──
-              ? Row(
+          child: LayoutBuilder(
+            builder: (ctx, constraints) {
+              final wide = constraints.maxWidth > 100;
+              if (wide) {
+                return Row(
                   children: [
                     AnimatedContainer(
                       duration: const Duration(milliseconds: 200),
@@ -344,9 +440,9 @@ class _LexiCoreShellState extends State<LexiCoreShell>
                       ),
                     ),
                   ],
-                )
-              // ── Collapsed: just icon centered ──
-              : Center(
+                );
+              } else {
+                return Center(
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
@@ -364,7 +460,10 @@ class _LexiCoreShellState extends State<LexiCoreShell>
                         ),
                     ],
                   ),
-                ),
+                );
+              }
+            },
+          ),
         ),
       ),
     );
@@ -384,7 +483,8 @@ class _LexiCoreShellState extends State<LexiCoreShell>
     final petEmoji = petEmojis[petId] ?? '🐾';
     final petName = _activePet?['name'] ?? 'No pet yet';
 
-    return Container(
+    return ClipRect(
+      child: Container(
       margin: const EdgeInsets.symmetric(horizontal: 8),
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
@@ -430,21 +530,11 @@ class _LexiCoreShellState extends State<LexiCoreShell>
             ),
           ] else ...[
             const SizedBox(height: 2),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(Icons.local_fire_department, size: 10, color: Colors.orangeAccent),
-                const SizedBox(width: 2),
-                Text(
-                  '$_streakDays',
-                  style: const TextStyle(fontSize: 9, color: Colors.orangeAccent, fontWeight: FontWeight.w700),
-                ),
-              ],
-            ),
+            const Icon(Icons.local_fire_department, size: 10, color: Colors.orangeAccent),
           ],
         ],
       ),
+    ),
     );
   }
 }

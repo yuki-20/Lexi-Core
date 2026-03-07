@@ -194,6 +194,43 @@ class _ProjectsPageState extends State<ProjectsPage> {
     }
   }
 
+  Future<void> _renameProject(Map<String, dynamic> project) async {
+    final controller = TextEditingController(text: project['name']?.toString() ?? '');
+    final newName = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: LiquidGlassTheme.bgDeep,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text('Rename Project', style: LiquidGlassTheme.headingSm),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          style: LiquidGlassTheme.body.copyWith(color: LiquidGlassTheme.textPrimary),
+          decoration: InputDecoration(
+            hintText: 'New name',
+            hintStyle: LiquidGlassTheme.body,
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, controller.text),
+            child: const Text('Rename'),
+          ),
+        ],
+      ),
+    );
+
+    if (newName != null && newName.trim().isNotEmpty) {
+      await _engine.updateProject(project['id'], name: newName.trim());
+      _loadProjects();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return SingleChildScrollView(
@@ -308,12 +345,15 @@ class _ProjectsPageState extends State<ProjectsPage> {
                             color: LiquidGlassTheme.bgDeep,
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                             onSelected: (action) async {
-                              if (action == 'delete') {
+                              if (action == 'rename') {
+                                _renameProject(project);
+                              } else if (action == 'delete') {
                                 await _engine.deleteProject(project['id']);
                                 _loadProjects();
                               }
                             },
                             itemBuilder: (_) => [
+                              const PopupMenuItem(value: 'rename', child: Text('Rename')),
                               const PopupMenuItem(value: 'delete', child: Text('Delete Project')),
                             ],
                           ),

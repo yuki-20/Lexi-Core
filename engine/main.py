@@ -901,6 +901,39 @@ async def api_get_avatar():
     return JSONResponse({"error": "No custom avatar"}, status_code=404)
 
 
+# ── XP & Leveling ──────────────────────────────────────────────────
+
+from engine.learning.xp_engine import (
+    xp_progress, calculate_award, word_mastery_tier,
+    XP_SEARCH, XP_SAVE, XP_QUIZ_CORRECT, XP_QUIZ_PERFECT,
+    XP_DAILY_LOGIN, XP_FLASHCARD, XP_DECK_COMPLETE,
+)
+
+
+@app.get("/api/xp/status")
+async def api_xp_status():
+    total_xp = engine.db.get_total_exp()
+    streak = engine.db.get_streak_days()
+    progress = xp_progress(total_xp)
+    progress["streak_days"] = streak
+    return JSONResponse(progress)
+
+
+@app.post("/api/xp/award")
+async def api_xp_award(req: dict):
+    action = req.get("action", "")
+    streak = engine.db.get_streak_days()
+    amount = calculate_award(action, streak)
+    if amount > 0:
+        engine.db.add_exp(amount)
+    total_xp = engine.db.get_total_exp()
+    return JSONResponse({
+        "awarded": amount,
+        "total_xp": total_xp,
+        **xp_progress(total_xp),
+    })
+
+
 # ── Run ───────────────────────────────────────────────────────────────
 
 def start():

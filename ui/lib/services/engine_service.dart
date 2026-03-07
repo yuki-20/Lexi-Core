@@ -493,6 +493,24 @@ class EngineService {
     }
   }
 
+  Future<bool> updateProject(int projectId, {String? name, String? description, String? color, String? icon}) async {
+    try {
+      final body = <String, dynamic>{};
+      if (name != null) body['name'] = name;
+      if (description != null) body['description'] = description;
+      if (color != null) body['color'] = color;
+      if (icon != null) body['icon'] = icon;
+      final resp = await http.put(
+        Uri.parse('$_baseUrl/api/projects/$projectId'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode(body),
+      ).timeout(const Duration(seconds: 3));
+      return resp.statusCode == 200;
+    } catch (_) {
+      return false;
+    }
+  }
+
   // ════════════════════════════════════════════════════════════════
   // FILE IMPORT (fixed with MultipartRequest)
   // ════════════════════════════════════════════════════════════════
@@ -531,6 +549,33 @@ class EngineService {
   }
 
   String get avatarUrl => '$_baseUrl/api/profile/avatar';
+
+  // ══════════════════════════════════════════════════════════════════
+  // XP & LEVELING
+  // ══════════════════════════════════════════════════════════════════
+
+  Future<Map<String, dynamic>> getXpStatus() async {
+    try {
+      final resp = await http.get(Uri.parse('$_baseUrl/api/xp/status'))
+          .timeout(const Duration(seconds: 3));
+      return Map<String, dynamic>.from(jsonDecode(resp.body));
+    } catch (_) {
+      return {};
+    }
+  }
+
+  Future<Map<String, dynamic>> awardXp(String action) async {
+    try {
+      final resp = await http.post(
+        Uri.parse('$_baseUrl/api/xp/award'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'action': action}),
+      ).timeout(const Duration(seconds: 3));
+      return Map<String, dynamic>.from(jsonDecode(resp.body));
+    } catch (_) {
+      return {};
+    }
+  }
 
   void dispose() {
     _ws?.sink.close();
