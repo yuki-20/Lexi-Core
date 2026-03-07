@@ -1,5 +1,5 @@
-/// LexiCore — Flashcards Page
-/// Deck list, create decks, study mode with card flip animation.
+/// LexiCore — Flashcards Page (v3.1)
+/// Deck management, 3D flip study mode, improved spacing + animations.
 library;
 
 import 'dart:math' as math;
@@ -19,10 +19,13 @@ class FlashcardsPage extends StatefulWidget {
 class _FlashcardsPageState extends State<FlashcardsPage> {
   final _engine = EngineService();
   List<Map<String, dynamic>> _decks = [];
-  bool _isStudying = false;
-  List<Map<String, dynamic>> _studyCards = [];
-  int _currentCard = 0;
-  bool _showAnswer = false;
+  bool _loading = true;
+
+  // Study mode
+  bool _studying = false;
+  List<Map<String, dynamic>> _cards = [];
+  int _cardIndex = 0;
+  bool _showingFront = true;
 
   @override
   void initState() {
@@ -31,49 +34,29 @@ class _FlashcardsPageState extends State<FlashcardsPage> {
   }
 
   Future<void> _loadDecks() async {
+    setState(() => _loading = true);
     final decks = await _engine.getDecks();
-    if (mounted) setState(() => _decks = decks);
-  }
-
-  Future<void> _createDeck() async {
-    final name = await _showNameDialog('Create Deck', 'Deck name');
-    if (name == null || name.isEmpty) return;
-    await _engine.createDeck(name);
-    _loadDecks();
-  }
-
-  Future<void> _studyDeck(int deckId) async {
-    final cards = await _engine.getCards(deckId);
-    if (cards.isEmpty) return;
-    cards.shuffle();
-    setState(() {
-      _studyCards = cards;
-      _currentCard = 0;
-      _showAnswer = false;
-      _isStudying = true;
-    });
-  }
-
-  void _nextCard() {
-    if (_currentCard < _studyCards.length - 1) {
-      setState(() { _currentCard++; _showAnswer = false; });
-    } else {
-      setState(() => _isStudying = false);
+    if (mounted) {
+      setState(() {
+        _decks = decks;
+        _loading = false;
+      });
     }
   }
 
-  Future<String?> _showNameDialog(String title, String hint) async {
+  Future<void> _createDeck() async {
     final controller = TextEditingController();
-    return showDialog<String>(
+    final name = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: LiquidGlassTheme.bgDeep,
-        title: Text(title, style: LiquidGlassTheme.headingSm),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text('Create Deck', style: LiquidGlassTheme.headingSm),
         content: TextField(
           controller: controller,
           style: LiquidGlassTheme.body.copyWith(color: LiquidGlassTheme.textPrimary),
           decoration: InputDecoration(
-            hintText: hint,
+            hintText: 'Deck name',
             hintStyle: LiquidGlassTheme.body,
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
           ),
@@ -87,71 +70,129 @@ class _FlashcardsPageState extends State<FlashcardsPage> {
         ],
       ),
     );
+    if (name != null && name.isNotEmpty) {
+      await _engine.createDeck(name);
+      _loadDecks();
+    }
+  }
+
+  Future<void> _deleteDeck(int id) async {
+    await _engine.deleteDeck(id);
+    _loadDecks();
+  }
+
+  Future<void> _startStudy(int deckId) async {
+    final cards = await _engine.getCards(deckId);
+    if (cards.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No cards in this deck')),
+        );
+      }
+      return;
+    }
+    setState(() {
+      _studying = true;
+      _cards = cards;
+      _cardIndex = 0;
+      _showingFront = true;
+    });
+  }
+
+  void _flipCard() {
+    setState(() => _showingFront = !_showingFront);
+  }
+
+  void _nextCard(bool easy) {
+    if (_cardIndex < _cards.length - 1) {
+      setState(() {
+        _cardIndex++;
+        _showingFront = true;
+      });
+    } else {
+      setState(() {
+        _studying = false;
+        _cards = [];
+      });
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_isStudying) return _buildStudyMode();
+    if (_studying) return _buildStudyMode();
     return _buildDeckList();
   }
 
   Widget _buildDeckList() {
     return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(24, 16, 24, 120),
+      padding: const EdgeInsets.fromLTRB(24, 20, 24, 120),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Expanded(
-                child: Text('Flashcards', style: LiquidGlassTheme.heading),
-              ),
-              IconButton(
-                onPressed: _createDeck,
-                icon: const Icon(Icons.add_rounded, color: LiquidGlassTheme.accentPrimary),
+              Expanded(child: Text('Flashcard Decks', style: LiquidGlassTheme.heading)),
+              GlassPanel(
+                borderRadius: 30,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: GestureDetector(
+                  onTap: _createDeck,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.add_rounded, size: 18, color: LiquidGlassTheme.accentPrimary),
+                      const SizedBox(width: 6),
+                      Text('New', style: LiquidGlassTheme.label.copyWith(
+                        color: LiquidGlassTheme.accentPrimary,
+                      )),
+                    ],
+                  ),
+                ),
               ),
             ],
           ).animate().fadeIn(duration: 400.ms),
-          const SizedBox(height: 20),
+          const SizedBox(height: 28),
 
-          if (_decks.isEmpty)
+          if (_loading)
+            const Center(child: CircularProgressIndicator(color: LiquidGlassTheme.accentPrimary))
+          else if (_decks.isEmpty)
             Center(
               child: GlassPanel(
                 child: Column(
                   children: [
-                    const Icon(Icons.style_outlined, size: 48, color: LiquidGlassTheme.textMuted),
-                    const SizedBox(height: 12),
-                    Text('No decks yet', style: LiquidGlassTheme.body),
+                    const Icon(Icons.style_outlined, size: 56, color: LiquidGlassTheme.textMuted),
+                    const SizedBox(height: 16),
+                    Text('No decks yet', style: LiquidGlassTheme.headingSm),
                     const SizedBox(height: 8),
-                    Text('Create a deck to start studying!', style: LiquidGlassTheme.bodySmall),
+                    Text(
+                      'Create a deck to start studying\nwith flashcards',
+                      style: LiquidGlassTheme.bodySmall,
+                      textAlign: TextAlign.center,
+                    ),
                   ],
                 ),
-              ),
-            ).animate().fadeIn(delay: 200.ms),
-
-          ..._decks.asMap().entries.map((entry) {
-            final deck = entry.value;
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: GlassPanel(
-                child: InkWell(
-                  onTap: () => _studyDeck(deck['id']),
-                  borderRadius: BorderRadius.circular(LiquidGlassTheme.borderRadius),
+              ).animate().fadeIn(delay: 200.ms).slideY(begin: 0.05, end: 0),
+            )
+          else
+            ..._decks.asMap().entries.map((entry) {
+              final deck = entry.value;
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 14),
+                child: GlassPanel(
+                  padding: const EdgeInsets.all(20),
                   child: Row(
                     children: [
                       Container(
-                        width: 48, height: 48,
+                        width: 52, height: 52,
                         decoration: BoxDecoration(
                           borderRadius: BorderRadius.circular(14),
-                          gradient: LinearGradient(
-                            colors: [
-                              LiquidGlassTheme.accentPrimary.withValues(alpha: 0.3),
-                              LiquidGlassTheme.accentSecondary.withValues(alpha: 0.2),
-                            ],
-                          ),
+                          gradient: LinearGradient(colors: [
+                            LiquidGlassTheme.accentPrimary.withValues(alpha: 0.3),
+                            LiquidGlassTheme.accentSecondary.withValues(alpha: 0.15),
+                          ]),
                         ),
                         child: const Center(
-                          child: Icon(Icons.style_rounded, color: LiquidGlassTheme.textPrimary, size: 24),
+                          child: Icon(Icons.style_rounded, color: LiquidGlassTheme.accentPrimary, size: 24),
                         ),
                       ),
                       const SizedBox(width: 16),
@@ -162,143 +203,185 @@ class _FlashcardsPageState extends State<FlashcardsPage> {
                             Text(deck['name'] ?? 'Untitled', style: LiquidGlassTheme.headingSm.copyWith(fontSize: 16)),
                             const SizedBox(height: 4),
                             Text(
-                              '${deck['card_count'] ?? 0} cards',
+                              '${deck['card_count'] ?? 0} cards • ${deck['source'] ?? 'manual'}',
                               style: LiquidGlassTheme.bodySmall,
                             ),
                           ],
                         ),
                       ),
+                      GlassPanel(
+                        borderRadius: 12,
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                        child: GestureDetector(
+                          onTap: () => _startStudy(deck['id']),
+                          child: Text('Study', style: LiquidGlassTheme.label.copyWith(
+                            color: LiquidGlassTheme.accentPrimary,
+                          )),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
                       IconButton(
-                        icon: const Icon(Icons.delete_outline, size: 20, color: LiquidGlassTheme.textMuted),
-                        onPressed: () async {
-                          await _engine.deleteDeck(deck['id']);
-                          _loadDecks();
-                        },
+                        icon: const Icon(Icons.delete_outline, size: 18, color: LiquidGlassTheme.textMuted),
+                        onPressed: () => _deleteDeck(deck['id']),
                       ),
                     ],
                   ),
-                ),
-              ).animate().fadeIn(delay: Duration(milliseconds: 100 * entry.key), duration: 400.ms)
-               .slideX(begin: 0.05, end: 0),
-            );
-          }),
+                ).animate()
+                 .fadeIn(delay: Duration(milliseconds: 150 * entry.key), duration: 400.ms)
+                 .slideY(begin: 0.05, end: 0),
+              );
+            }),
         ],
       ),
     );
   }
 
   Widget _buildStudyMode() {
-    final card = _studyCards[_currentCard];
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text(
-              'Card ${_currentCard + 1} / ${_studyCards.length}',
-              style: LiquidGlassTheme.bodySmall,
-            ),
-            const SizedBox(height: 24),
+    if (_cards.isEmpty) return const SizedBox.shrink();
+    final card = _cards[_cardIndex];
+    final progress = (_cardIndex + 1) / _cards.length;
 
-            GestureDetector(
-              onTap: () => setState(() => _showAnswer = !_showAnswer),
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 20, 24, 120),
+      child: Column(
+        children: [
+          // Header
+          Row(
+            children: [
+              GlassPanel(
+                borderRadius: 12,
+                padding: const EdgeInsets.all(8),
+                child: GestureDetector(
+                  onTap: () => setState(() => _studying = false),
+                  child: const Icon(Icons.arrow_back, size: 20, color: LiquidGlassTheme.textSecondary),
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Card ${_cardIndex + 1} of ${_cards.length}',
+                      style: LiquidGlassTheme.label,
+                    ),
+                    const SizedBox(height: 6),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(6),
+                      child: LinearProgressIndicator(
+                        value: progress,
+                        backgroundColor: LiquidGlassTheme.glassFill,
+                        valueColor: const AlwaysStoppedAnimation(LiquidGlassTheme.accentPrimary),
+                        minHeight: 5,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ).animate().fadeIn(duration: 400.ms),
+          const SizedBox(height: 40),
+
+          // 3D Flip Card
+          Expanded(
+            child: GestureDetector(
+              onTap: _flipCard,
               child: AnimatedSwitcher(
-                duration: const Duration(milliseconds: 400),
+                duration: const Duration(milliseconds: 500),
                 transitionBuilder: (child, animation) {
-                  final rotate = Tween(begin: math.pi / 2, end: 0.0).animate(animation);
+                  final rotate = Tween(begin: math.pi / 2, end: 0.0).animate(
+                    CurvedAnimation(parent: animation, curve: Curves.easeOutBack),
+                  );
                   return AnimatedBuilder(
                     animation: rotate,
-                    builder: (_, child) => Transform(
-                      transform: Matrix4.rotationY(rotate.value),
+                    builder: (ctx, ch) => Transform(
                       alignment: Alignment.center,
-                      child: child,
+                      transform: Matrix4.rotationY(rotate.value),
+                      child: ch,
                     ),
                     child: child,
                   );
                 },
                 child: GlassPanel(
-                  key: ValueKey(_showAnswer),
-                  padding: const EdgeInsets.all(40),
-                  borderRadius: LiquidGlassTheme.borderRadiusLg,
-                  child: SizedBox(
-                    width: double.infinity,
-                    height: 200,
-                    child: Center(
-                      child: Text(
-                        _showAnswer
-                            ? (card['definition'] ?? 'No definition')
-                            : (card['word'] ?? ''),
-                        style: _showAnswer
-                            ? LiquidGlassTheme.body.copyWith(fontSize: 16)
-                            : LiquidGlassTheme.heading,
-                        textAlign: TextAlign.center,
-                      ),
+                  key: ValueKey(_showingFront ? 'front' : 'back-$_cardIndex'),
+                  borderRadius: 24,
+                  padding: const EdgeInsets.all(36),
+                  child: Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          _showingFront ? '📝' : '💡',
+                          style: const TextStyle(fontSize: 36),
+                        ),
+                        const SizedBox(height: 20),
+                        Text(
+                          _showingFront
+                              ? (card['word'] ?? '')
+                              : (card['definition'] ?? 'No definition'),
+                          style: _showingFront
+                              ? LiquidGlassTheme.heading.copyWith(fontSize: 30)
+                              : LiquidGlassTheme.body.copyWith(fontSize: 17, height: 1.6),
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 20),
+                        Text(
+                          _showingFront ? 'Tap to reveal' : 'Tap to flip back',
+                          style: LiquidGlassTheme.bodySmall,
+                        ),
+                      ],
                     ),
                   ),
                 ),
               ),
             ),
+          ),
+          const SizedBox(height: 28),
 
-            const SizedBox(height: 16),
-            Text(
-              _showAnswer ? 'Tap to see word' : 'Tap to reveal answer',
-              style: LiquidGlassTheme.bodySmall,
-            ),
-            const SizedBox(height: 32),
-
+          // Buttons
+          if (!_showingFront)
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 _StudyButton(
-                  icon: Icons.close_rounded,
-                  color: Colors.redAccent,
                   label: 'Hard',
-                  onTap: _nextCard,
+                  color: LiquidGlassTheme.accentTertiary,
+                  icon: Icons.refresh_rounded,
+                  onTap: () => _nextCard(false),
                 ),
                 const SizedBox(width: 20),
                 _StudyButton(
-                  icon: Icons.check_rounded,
-                  color: Colors.greenAccent,
                   label: 'Easy',
-                  onTap: _nextCard,
+                  color: Colors.greenAccent,
+                  icon: Icons.check_rounded,
+                  onTap: () => _nextCard(true),
                 ),
               ],
-            ),
-
-            const SizedBox(height: 20),
-            TextButton(
-              onPressed: () => setState(() => _isStudying = false),
-              child: Text('Exit Study', style: LiquidGlassTheme.body.copyWith(
-                color: LiquidGlassTheme.accentPrimary,
-              )),
-            ),
-          ],
-        ),
+            ).animate().fadeIn(duration: 300.ms).slideY(begin: 0.1, end: 0),
+        ],
       ),
     );
   }
 }
 
 class _StudyButton extends StatelessWidget {
-  final IconData icon;
-  final Color color;
   final String label;
+  final Color color;
+  final IconData icon;
   final VoidCallback onTap;
-  const _StudyButton({required this.icon, required this.color, required this.label, required this.onTap});
+  const _StudyButton({required this.label, required this.color, required this.icon, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
-    return GlassPanel(
-      borderRadius: 30,
-      padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 14),
-      child: InkWell(
-        onTap: onTap,
+    return GestureDetector(
+      onTap: onTap,
+      child: GlassPanel(
+        borderRadius: 20,
+        padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 14),
         child: Row(
           children: [
-            Icon(icon, color: color, size: 22),
+            Icon(icon, color: color, size: 20),
             const SizedBox(width: 8),
-            Text(label, style: LiquidGlassTheme.body.copyWith(color: color)),
+            Text(label, style: LiquidGlassTheme.label.copyWith(color: color, fontSize: 14)),
           ],
         ),
       ),

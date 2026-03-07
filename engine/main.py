@@ -182,6 +182,20 @@ class ProfileUpdateRequest(BaseModel):
     value: str
 
 
+class CreateProjectRequest(BaseModel):
+    name: str
+    description: str = ""
+    color: str = "#7C4DFF"
+    icon: str = "folder"
+
+
+class UpdateProjectRequest(BaseModel):
+    name: str | None = None
+    description: str | None = None
+    color: str | None = None
+    icon: str | None = None
+
+
 # ══════════════════════════════════════════════════════════════════════
 # ORIGINAL ENDPOINTS (v2.0)
 # ══════════════════════════════════════════════════════════════════════
@@ -818,6 +832,73 @@ async def websocket_endpoint(ws: WebSocket):
 
     except WebSocketDisconnect:
         pass
+
+
+# ══════════════════════════════════════════════════════════════════════
+# v3.1 — PROJECTS
+# ══════════════════════════════════════════════════════════════════════
+
+@app.get("/api/projects")
+async def api_get_projects():
+    return {"projects": engine.db.get_projects()}
+
+
+@app.post("/api/projects")
+async def api_create_project(req: CreateProjectRequest):
+    pid = engine.db.create_project(req.name, req.description, req.color, req.icon)
+    return {"id": pid, "status": "created"}
+
+
+@app.get("/api/projects/{project_id}")
+async def api_get_project(project_id: int):
+    p = engine.db.get_project(project_id)
+    if not p:
+        return JSONResponse({"error": "Project not found"}, status_code=404)
+    return p
+
+
+@app.put("/api/projects/{project_id}")
+async def api_update_project(project_id: int, req: UpdateProjectRequest):
+    updates = {k: v for k, v in req.model_dump().items() if v is not None}
+    engine.db.update_project(project_id, **updates)
+    return {"status": "updated"}
+
+
+@app.delete("/api/projects/{project_id}")
+async def api_delete_project(project_id: int):
+    engine.db.delete_project(project_id)
+    return {"status": "deleted"}
+
+
+@app.post("/api/projects/{project_id}/deck")
+async def api_create_project_deck(project_id: int, req: CreateDeckRequest):
+    deck_id = engine.db.create_deck(req.name, source=f"project:{project_id}")
+    return {"deck_id": deck_id, "project_id": project_id}
+
+
+# ══════════════════════════════════════════════════════════════════════
+# v3.1 — AVATAR UPLOAD
+# ══════════════════════════════════════════════════════════════════════
+
+@app.post("/api/profile/avatar")
+async def api_upload_avatar(file: UploadFile = File(...)):
+    avatar_dir = DATA_DIR / "avatars"
+    avatar_dir.mkdir(exist_ok=True)
+    ext = Path(file.filename or "avatar.png").suffix or ".png"
+    avatar_path = avatar_dir / f"user_avatar{ext}"
+    content = await file.read()
+    avatar_path.write_bytes(content)
+    engine.db.set_profile("avatar_path", str(avatar_path))
+    return {"status": "uploaded", "path": str(avatar_path)}
+
+
+@app.get("/api/profile/avatar")
+async def api_get_avatar():
+    profile = engine.db.get_profile()
+    avatar_path = profile.get("avatar_path", "")
+    if avatar_path and Path(avatar_path).exists():
+        return FileResponse(avatar_path)
+    return JSONResponse({"error": "No custom avatar"}, status_code=404)
 
 
 # ── Run ───────────────────────────────────────────────────────────────

@@ -126,6 +126,17 @@ CREATE TABLE IF NOT EXISTS pet_unlocks (
     unlocked_at TEXT    NOT NULL DEFAULT (datetime('now'))
 );
 
+-- ── v3.1 — Projects ─────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS projects (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    name        TEXT    NOT NULL,
+    description TEXT    DEFAULT '',
+    color       TEXT    DEFAULT '#7C4DFF',
+    icon        TEXT    DEFAULT 'folder',
+    created_at  TEXT    NOT NULL DEFAULT (datetime('now'))
+);
+
 -- ── Indexes ──────────────────────────────────────────────────────
 
 CREATE INDEX IF NOT EXISTS idx_search_word ON search_history(word);
@@ -607,3 +618,75 @@ class UserDB:
             "active_days": active_days,
             "total_exp": self.get_total_exp(),
         }
+
+    # ── Projects ─────────────────────────────────────────────────
+
+    def get_projects(self) -> list[dict]:
+        with self._conn() as conn:
+            cur = conn.execute(
+                "SELECT id, name, description, color, icon, created_at FROM projects ORDER BY created_at DESC"
+            )
+            projects = [dict(r) for r in cur.fetchall()]
+            for p in projects:
+                cur2 = conn.execute(
+                    "SELECT COUNT(*) as cnt FROM flashcard_decks WHERE source = ?",
+                    (f"project:{p['id']}",)
+                )
+                p["deck_count"] = cur2.fetchone()["cnt"]
+                cur3 = conn.execute(
+                    "SELECT COUNT(*) as cnt FROM quiz_results WHERE deck_id IN "
+                    "(SELECT id FROM flashcard_decks WHERE source = ?)",
+                    (f"project:{p['id']}",)
+                )
+                p["quiz_count"] = cur3.fetchone()["cnt"]
+            return projects
+
+    def create_project(self, name: str, description: str = "", color: str = "#7C4DFF", icon: str = "folder") -> int:
+        with self._conn() as conn:
+            cur = conn.execute(
+                "INSERT INTO projects (name, description, color, icon) VALUES (?, ?, ?, ?)",
+                (name, description, color, icon)
+            )
+            return cur.lastrowid
+
+    def update_project(self, project_id: int, **kwargs) -> bool:
+        allowed = {"name", "description", "color", "icon"}
+        updates = {k: v for k, v in kwargs.items() if k in allowed}
+        if not updates:
+            return False
+        set_clause = ", ".join(f"{k} = ?" for k in updates)
+        values = list(updates.values()) + [project_id]
+        with self._conn() as conn:
+            conn.execute(f"UPDATE projects SET {set_clause} WHERE id = ?", values)
+        return True
+
+    def delete_project(self, project_id: int) -> bool:
+        with self._conn() as conn:
+            conn.execute(
+                "DELETE FROM flashcard_cards WHERE deck_id IN "
+                "(SELECT id FROM flashcard_decks WHERE source = ?)",
+                (f"project:{project_id}",)
+            )
+            conn.execute(
+                "DELETE FROM flashcard_decks WHERE source = ?",
+                (f"project:{project_id}",)
+            )
+            conn.execute("DELETE FROM projects WHERE id = ?", (project_id,))
+        return True
+
+    def get_project(self, project_id: int) -> dict | None:
+        with self._conn() as conn:
+            cur = conn.execute(
+                "SELECT id, name, description, color, icon, created_at FROM projects WHERE id = ?",
+                (project_id,)
+            )
+            row = cur.fetchone()
+            if not row:
+                return None
+            p = dict(row)
+            cur2 = conn.execute(
+                "SELECT id, name, source, created_at FROM flashcard_decks WHERE source = ?",
+                (f"project:{project_id}",)
+            )
+            p["decks"] = [dict(r) for r in cur2.fetchall()]
+            return p

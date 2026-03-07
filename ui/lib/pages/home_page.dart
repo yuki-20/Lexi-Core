@@ -1,5 +1,5 @@
-/// LexiCore — Home Page
-/// Main dashboard with welcome banner, search, WOTD, and quick actions.
+/// LexiCore — Home Page (v3.1)
+/// Personalized dashboard with glass design, staggered animations.
 library;
 
 import 'package:flutter/material.dart';
@@ -87,7 +87,7 @@ class _HomePageState extends State<HomePage> {
   @override
   Widget build(BuildContext context) {
     return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(24, 16, 24, 120),
+      padding: const EdgeInsets.fromLTRB(24, 20, 24, 120),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -95,29 +95,32 @@ class _HomePageState extends State<HomePage> {
           Text(
             _welcomeMsg,
             style: LiquidGlassTheme.heading.copyWith(fontSize: 26),
-          ).animate().fadeIn(duration: 600.ms).slideX(begin: -0.05, end: 0),
-          const SizedBox(height: 4),
+          ).animate().fadeIn(duration: 500.ms).slideX(begin: -0.04, end: 0),
+          const SizedBox(height: 6),
           Text(
             'What would you like to learn today?',
             style: LiquidGlassTheme.body,
-          ).animate().fadeIn(delay: 200.ms, duration: 500.ms),
-          const SizedBox(height: 24),
+          ).animate().fadeIn(delay: 150.ms, duration: 400.ms),
+          const SizedBox(height: 28),
 
           // ── Search Bar ──
           lexi.SearchBar(
             onSearch: _onSearch,
             onChanged: _onSearchChanged,
             isLoading: _isLoading,
-          ),
+          ).animate().fadeIn(delay: 250.ms, duration: 400.ms).slideY(begin: 0.05, end: 0),
 
           // ── Autocomplete ──
           if (_suggestions.isNotEmpty)
-            AutocompleteDropdown(
-              suggestions: _suggestions,
-              onSelect: (word) {
-                setState(() => _suggestions = []);
-                _onSearch(word);
-              },
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: AutocompleteDropdown(
+                suggestions: _suggestions,
+                onSelect: (word) {
+                  setState(() => _suggestions = []);
+                  _onSearch(word);
+                },
+              ),
             ),
 
           const SizedBox(height: 20),
@@ -131,10 +134,10 @@ class _HomePageState extends State<HomePage> {
                   result: _result!,
                   onSave: _onSaveWord,
                   isSaved: _isSaved,
-                ),
+                ).animate().fadeIn(duration: 400.ms).slideY(begin: 0.05, end: 0),
                 if (_result!.source != null)
                   Padding(
-                    padding: const EdgeInsets.only(top: 8),
+                    padding: const EdgeInsets.only(top: 10),
                     child: Row(
                       children: [
                         Icon(
@@ -154,14 +157,14 @@ class _HomePageState extends State<HomePage> {
                           ),
                         ),
                       ],
-                    ).animate().fadeIn(delay: 300.ms),
+                    ).animate().fadeIn(delay: 200.ms),
                   ),
               ],
             ),
 
           // ── Word of the Day ──
           if (_wotd != null && _wotd!['word'] != null) ...[
-            const SizedBox(height: 24),
+            const SizedBox(height: 28),
             GlassPanel(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -178,20 +181,29 @@ class _HomePageState extends State<HomePage> {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 10),
+                  const SizedBox(height: 12),
                   Text(
                     _wotd!['word'] ?? '',
                     style: LiquidGlassTheme.headingSm,
                   ),
+                  if (_wotd!['definition'] != null) ...[
+                    const SizedBox(height: 6),
+                    Text(
+                      _wotd!['definition'],
+                      style: LiquidGlassTheme.body,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
                 ],
               ),
             ).animate().fadeIn(delay: 400.ms, duration: 500.ms)
-             .slideY(begin: 0.1, end: 0),
+             .slideY(begin: 0.08, end: 0),
           ],
 
           // ── Quick Stats ──
           if (_stats != null && _stats!.isNotEmpty) ...[
-            const SizedBox(height: 20),
+            const SizedBox(height: 22),
             Row(
               children: [
                 _QuickStat(
@@ -199,20 +211,21 @@ class _HomePageState extends State<HomePage> {
                   label: 'Words',
                   value: '${_stats!['dictionary_size'] ?? 0}',
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(width: 14),
                 _QuickStat(
                   icon: Icons.local_fire_department_rounded,
                   label: 'Streak',
                   value: '${(_stats!['learning'] as Map?)?['streak_days'] ?? 0}d',
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(width: 14),
                 _QuickStat(
                   icon: Icons.bolt_rounded,
                   label: 'EXP',
                   value: '${(_stats!['learning'] as Map?)?['total_exp'] ?? 0}',
                 ),
               ],
-            ).animate().fadeIn(delay: 500.ms, duration: 400.ms),
+            ).animate().fadeIn(delay: 500.ms, duration: 400.ms)
+             .slideY(begin: 0.05, end: 0),
           ],
         ],
       ),
@@ -230,13 +243,14 @@ class _QuickStat extends StatelessWidget {
   Widget build(BuildContext context) {
     return Expanded(
       child: GlassPanel(
-        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
+        padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 14),
         borderRadius: LiquidGlassTheme.borderRadiusSm,
         child: Column(
           children: [
             Icon(icon, size: 22, color: LiquidGlassTheme.accentPrimary),
-            const SizedBox(height: 6),
-            Text(value, style: LiquidGlassTheme.headingSm.copyWith(fontSize: 16)),
+            const SizedBox(height: 8),
+            Text(value, style: LiquidGlassTheme.headingSm.copyWith(fontSize: 17)),
+            const SizedBox(height: 2),
             Text(label, style: LiquidGlassTheme.bodySmall),
           ],
         ),

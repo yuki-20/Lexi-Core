@@ -452,6 +452,86 @@ class EngineService {
     }
   }
 
+  // ════════════════════════════════════════════════════════════════
+  // PROJECTS
+  // ════════════════════════════════════════════════════════════════
+
+  Future<List<Map<String, dynamic>>> getProjects() async {
+    try {
+      final resp = await http.get(Uri.parse('$_baseUrl/api/projects'))
+          .timeout(const Duration(seconds: 3));
+      final data = jsonDecode(resp.body);
+      return List<Map<String, dynamic>>.from(data['projects'] ?? []);
+    } catch (_) {
+      return [];
+    }
+  }
+
+  Future<int?> createProject(String name, {
+    String description = '', String color = '#7C4DFF', String icon = 'folder',
+  }) async {
+    try {
+      final resp = await http.post(
+        Uri.parse('$_baseUrl/api/projects'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'name': name, 'description': description, 'color': color, 'icon': icon}),
+      ).timeout(const Duration(seconds: 3));
+      final data = jsonDecode(resp.body);
+      return data['id'];
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<bool> deleteProject(int projectId) async {
+    try {
+      final resp = await http.delete(Uri.parse('$_baseUrl/api/projects/$projectId'))
+          .timeout(const Duration(seconds: 3));
+      return resp.statusCode == 200;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  // ════════════════════════════════════════════════════════════════
+  // FILE IMPORT (fixed with MultipartRequest)
+  // ════════════════════════════════════════════════════════════════
+
+  Future<Map<String, dynamic>?> importFile(String filePath) async {
+    try {
+      final request = http.MultipartRequest(
+        'POST',
+        Uri.parse('$_baseUrl/api/import/file'),
+      );
+      request.files.add(await http.MultipartFile.fromPath('file', filePath));
+      final resp = await request.send().timeout(const Duration(seconds: 15));
+      final body = await resp.stream.bytesToString();
+      return jsonDecode(body);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  // ════════════════════════════════════════════════════════════════
+  // AVATAR UPLOAD
+  // ════════════════════════════════════════════════════════════════
+
+  Future<bool> uploadAvatar(String filePath) async {
+    try {
+      final request = http.MultipartRequest(
+        'POST',
+        Uri.parse('$_baseUrl/api/profile/avatar'),
+      );
+      request.files.add(await http.MultipartFile.fromPath('file', filePath));
+      final resp = await request.send().timeout(const Duration(seconds: 10));
+      return resp.statusCode == 200;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  String get avatarUrl => '$_baseUrl/api/profile/avatar';
+
   void dispose() {
     _ws?.sink.close();
     _autocompleteController.close();
