@@ -1,6 +1,6 @@
 """
-LexiCore — FastAPI Main Server
-================================
+LexiCore — FastAPI Main Server (v3.0)
+=======================================
 The central entrypoint that boots the engine, loads data structures into RAM,
 and exposes all API endpoints on localhost:8741.
 """
@@ -14,7 +14,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, Query, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Query, UploadFile, File, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
@@ -38,6 +38,7 @@ from engine.media.tts import fetch_audio
 from engine.media.images import fetch_image as async_fetch_image
 from engine.media.ocr import ocr_screen_region
 from engine.media.anki_export import export_to_anki
+from engine.media.cambridge import lookup_online, get_pronunciation_url
 
 
 # ── Engine Singleton ──────────────────────────────────────────────────
@@ -74,7 +75,6 @@ class LexiCoreEngine:
             self.trie.insert(word)
             self.bloom.add(word)
 
-            # Build inverted index from definitions
             try:
                 definition = self.meaning_store.read_entry(offset, length)
                 self.inverted_index.add_document(word, definition)
@@ -87,6 +87,18 @@ class LexiCoreEngine:
 
         print(f"[OK] Loaded {len(words):,} words in {elapsed:.2f}s")
         print(f"    Trie: {self.trie.size:,} | Bloom: OK | Inverted Index: {self.inverted_index.term_count:,} terms")
+
+    def get_definition_dict(self, word: str) -> dict | None:
+        """Get a parsed definition dict for a word."""
+        result = self.index_store.lookup(word)
+        if not result:
+            return None
+        offset, length = result
+        raw = self.meaning_store.read_entry(offset, length)
+        if isinstance(raw, dict):
+            return raw
+        # If raw is a string, wrap it
+        return {"word": word, "definitions": [str(raw)], "pos": [], "synonyms": [], "examples": [], "etymology": ""}
 
     @property
     def is_ready(self) -> bool:
@@ -106,12 +118,11 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="LexiCore Engine",
-    version="2.0.0",
+    version="3.0.0",
     description="Blazing-fast offline dictionary & vocabulary engine",
     lifespan=lifespan,
 )
 
-# CORS — allow the Tauri/React frontend
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -144,13 +155,43 @@ class SaveWordRequest(BaseModel):
     definition: str | None = None
 
 
+class CreateDeckRequest(BaseModel):
+    name: str
+    source: str = "manual"
+
+
+class AddCardRequest(BaseModel):
+    word: str
+    definition: str | None = None
+
+
+class CreateDeckFromWordsRequest(BaseModel):
+    name: str
+    words: list[str]
+    count: int | None = None  # if None, use all words
+
+
+class SubmitQuizRequest(BaseModel):
+    deck_id: int | None = None
+    answers: list[dict]  # [{word, user_answer, correct_answer, is_correct}]
+    duration_s: float | None = None
+
+
+class ProfileUpdateRequest(BaseModel):
+    key: str
+    value: str
+
+
+# ══════════════════════════════════════════════════════════════════════
+# ORIGINAL ENDPOINTS (v2.0)
+# ══════════════════════════════════════════════════════════════════════
+
 # ── 1. Exact Search ──────────────────────────────────────────────────
 
 @app.get("/api/search")
 async def api_search_exact(q: str = Query(..., min_length=1)):
     t0 = time.perf_counter()
 
-    # Bloom fast-fail
     if not engine.bloom.might_contain(q):
         return JSONResponse({
             "found": False,
@@ -158,7 +199,6 @@ async def api_search_exact(q: str = Query(..., min_length=1)):
             "timing_ms": round((time.perf_counter() - t0) * 1000, 3),
         })
 
-    # LRU cache check
     cached = engine.cache.get(q.lower())
     if cached is not None:
         elapsed = round((time.perf_counter() - t0) * 1000, 3)
@@ -170,7 +210,6 @@ async def api_search_exact(q: str = Query(..., min_length=1)):
             "timing_ms": elapsed,
         })
 
-    # Index lookup
     result = engine.index_store.lookup(q)
     if result is None:
         return JSONResponse({
@@ -329,6 +368,12 @@ async def api_get_saved():
     return JSONResponse({"words": engine.db.get_saved_words()})
 
 
+@app.delete("/api/saved/{word}")
+async def api_delete_saved(word: str):
+    deleted = engine.db.delete_saved_word(word)
+    return JSONResponse({"deleted": deleted, "word": word})
+
+
 @app.get("/api/history")
 async def api_history(limit: int = Query(50, ge=1, le=200)):
     return JSONResponse({"history": engine.db.get_search_history(limit)})
@@ -341,7 +386,6 @@ async def api_word_of_the_day():
         is_learned=lambda w: engine.db.is_saved(w),
     )
     if word:
-        # Also fetch definition
         result = engine.index_store.lookup(word)
         definition = None
         if result:
@@ -349,6 +393,357 @@ async def api_word_of_the_day():
             definition = engine.meaning_store.read_entry(offset, length)
         return JSONResponse({"word": word, "definition": definition})
     return JSONResponse({"word": None, "definition": None})
+
+
+# ══════════════════════════════════════════════════════════════════════
+# v3.0 — ONLINE SEARCH (Cambridge Dictionary Fallback)
+# ══════════════════════════════════════════════════════════════════════
+
+@app.get("/api/search/online")
+async def api_search_online(q: str = Query(..., min_length=1)):
+    """Search online when word is not in local database."""
+    t0 = time.perf_counter()
+    result = await lookup_online(q)
+    elapsed = round((time.perf_counter() - t0) * 1000, 3)
+
+    if result:
+        engine.db.log_search(q)
+        return JSONResponse({
+            "found": True,
+            "query": q,
+            "definition": result,
+            "source": "online",
+            "timing_ms": elapsed,
+        })
+    return JSONResponse({
+        "found": False,
+        "query": q,
+        "source": "online",
+        "timing_ms": elapsed,
+    })
+
+
+# ── Pronunciation Audio URL ──────────────────────────────────────────
+
+@app.get("/api/pronounce")
+async def api_pronounce(q: str = Query(..., min_length=1),
+                         accent: str = Query("us")):
+    """Get pronunciation audio URL (US or UK accent)."""
+    url = await get_pronunciation_url(q, accent)
+    return JSONResponse({
+        "word": q,
+        "accent": accent,
+        "audio_url": url,
+    })
+
+
+# ══════════════════════════════════════════════════════════════════════
+# v3.0 — FLASHCARD DECKS
+# ══════════════════════════════════════════════════════════════════════
+
+@app.get("/api/decks")
+async def api_get_decks():
+    return JSONResponse({"decks": engine.db.get_decks()})
+
+
+@app.post("/api/decks")
+async def api_create_deck(req: CreateDeckRequest):
+    deck_id = engine.db.create_deck(req.name, req.source)
+    return JSONResponse({"id": deck_id, "name": req.name})
+
+
+@app.delete("/api/decks/{deck_id}")
+async def api_delete_deck(deck_id: int):
+    deleted = engine.db.delete_deck(deck_id)
+    return JSONResponse({"deleted": deleted})
+
+
+@app.get("/api/decks/{deck_id}/cards")
+async def api_get_cards(deck_id: int):
+    cards = engine.db.get_cards(deck_id)
+    return JSONResponse({"cards": cards})
+
+
+@app.post("/api/decks/{deck_id}/cards")
+async def api_add_card(deck_id: int, req: AddCardRequest):
+    # Auto-fill definition from local DB if not provided
+    definition = req.definition
+    if not definition:
+        defn = engine.get_definition_dict(req.word)
+        if defn and defn.get("definitions"):
+            definition = defn["definitions"][0]
+
+    card_id = engine.db.add_card(deck_id, req.word, definition)
+    return JSONResponse({"id": card_id, "word": req.word, "definition": definition})
+
+
+@app.delete("/api/cards/{card_id}")
+async def api_delete_card(card_id: int):
+    deleted = engine.db.delete_card(card_id)
+    return JSONResponse({"deleted": deleted})
+
+
+@app.post("/api/decks/from-words")
+async def api_create_deck_from_words(req: CreateDeckFromWordsRequest):
+    """Create a deck from a list of words, auto-filling definitions."""
+    deck_id = engine.db.create_deck(req.name, "manual")
+    words_to_use = req.words[:req.count] if req.count else req.words
+    added = 0
+
+    for word in words_to_use:
+        defn = engine.get_definition_dict(word)
+        definition = defn["definitions"][0] if defn and defn.get("definitions") else None
+        engine.db.add_card(deck_id, word, definition)
+        added += 1
+
+    return JSONResponse({"deck_id": deck_id, "cards_added": added})
+
+
+# ══════════════════════════════════════════════════════════════════════
+# v3.0 — QUIZ SYSTEM
+# ══════════════════════════════════════════════════════════════════════
+
+@app.get("/api/quiz/generate")
+async def api_generate_quiz(deck_id: int | None = Query(None),
+                             count: int = Query(10, ge=1, le=50)):
+    """Generate a multiple-choice quiz from saved words or a deck."""
+    if deck_id is not None:
+        cards = engine.db.get_cards(deck_id)
+        words = [{"word": c["word"], "definition": c.get("definition", "")} for c in cards]
+    else:
+        saved = engine.db.get_saved_words()
+        words = [{"word": w["word"], "definition": w.get("definition", "")} for w in saved]
+
+    if len(words) < 4:
+        return JSONResponse(
+            {"error": "Need at least 4 words to generate a quiz"},
+            status_code=400,
+        )
+
+    questions = engine.db.generate_quiz(words, count)
+    return JSONResponse({"questions": questions, "total": len(questions)})
+
+
+@app.post("/api/quiz/submit")
+async def api_submit_quiz(req: SubmitQuizRequest):
+    """Submit quiz results and get feedback."""
+    correct = sum(1 for a in req.answers if a.get("is_correct"))
+    total = len(req.answers)
+    score_pct = round((correct / total) * 100, 1) if total > 0 else 0
+
+    quiz_id = engine.db.create_quiz_result(
+        req.deck_id, total, correct, score_pct, req.duration_s,
+    )
+
+    for answer in req.answers:
+        engine.db.add_quiz_answer(
+            quiz_id,
+            answer.get("word", ""),
+            answer.get("user_answer"),
+            answer.get("correct_answer", ""),
+            answer.get("is_correct", False),
+            answer.get("explanation"),
+        )
+
+    # Check for pet unlocks
+    newly_eligible = engine.db.check_pet_eligibility()
+    new_pets = []
+    for pet_id in newly_eligible:
+        if engine.db.unlock_pet(pet_id):
+            new_pets.append(pet_id)
+
+    return JSONResponse({
+        "quiz_id": quiz_id,
+        "correct": correct,
+        "total": total,
+        "score_pct": score_pct,
+        "new_pets_unlocked": new_pets,
+    })
+
+
+@app.get("/api/quiz/history")
+async def api_quiz_history(limit: int = Query(20, ge=1, le=100)):
+    return JSONResponse({"history": engine.db.get_quiz_history(limit)})
+
+
+@app.get("/api/quiz/{quiz_id}/answers")
+async def api_quiz_detail(quiz_id: int):
+    answers = engine.db.get_quiz_answers(quiz_id)
+    return JSONResponse({"answers": answers})
+
+
+# ══════════════════════════════════════════════════════════════════════
+# v3.0 — FILE IMPORT
+# ══════════════════════════════════════════════════════════════════════
+
+@app.post("/api/import/file")
+async def api_import_file(file: UploadFile = File(...)):
+    """Import words from a text file (one word per line or JSON)."""
+    content = await file.read()
+    text = content.decode("utf-8", errors="ignore")
+    filename = file.filename or "unknown.txt"
+
+    # Parse words
+    words = []
+    if filename.endswith(".json"):
+        try:
+            data = json.loads(text)
+            if isinstance(data, list):
+                words = data
+            elif isinstance(data, dict):
+                words = list(data.keys())
+        except json.JSONDecodeError:
+            return JSONResponse({"error": "Invalid JSON"}, status_code=400)
+    else:
+        # Text file: one word per line
+        words = [line.strip() for line in text.splitlines() if line.strip()]
+
+    if not words:
+        return JSONResponse({"error": "No words found in file"}, status_code=400)
+
+    # Save to DB
+    file_id = engine.db.add_imported_file(filename, len(words))
+    for word in words:
+        if isinstance(word, str):
+            defn = engine.get_definition_dict(word)
+            definition = None
+            if defn and defn.get("definitions"):
+                definition = defn["definitions"][0] if isinstance(defn["definitions"], list) else str(defn["definitions"])
+            engine.db.save_word(word, definition=definition, source_file=filename)
+
+    return JSONResponse({
+        "file_id": file_id,
+        "filename": filename,
+        "words_imported": len(words),
+    })
+
+
+@app.get("/api/import/files")
+async def api_get_imported_files():
+    files = engine.db.get_imported_files()
+    return JSONResponse({"files": files})
+
+
+@app.delete("/api/import/files/{file_id}")
+async def api_delete_imported_file(file_id: int):
+    deleted = engine.db.delete_imported_file(file_id)
+    return JSONResponse({"deleted": deleted})
+
+
+@app.get("/api/import/files/{file_id}/words")
+async def api_get_file_words(file_id: int):
+    files = engine.db.get_imported_files()
+    target = next((f for f in files if f["id"] == file_id), None)
+    if not target:
+        return JSONResponse({"error": "File not found"}, status_code=404)
+    words = engine.db.get_words_by_source(target["filename"])
+    return JSONResponse({"words": words, "filename": target["filename"]})
+
+
+# ══════════════════════════════════════════════════════════════════════
+# v3.0 — USER PROFILE
+# ══════════════════════════════════════════════════════════════════════
+
+@app.get("/api/profile")
+async def api_get_profile():
+    profile = engine.db.get_profile()
+    return JSONResponse({"profile": profile})
+
+
+@app.put("/api/profile")
+async def api_update_profile(req: ProfileUpdateRequest):
+    engine.db.set_profile(req.key, req.value)
+    return JSONResponse({"updated": True, "key": req.key})
+
+
+# ══════════════════════════════════════════════════════════════════════
+# v3.0 — STREAK PETS
+# ══════════════════════════════════════════════════════════════════════
+
+@app.get("/api/pets")
+async def api_get_all_pets():
+    """Get all pets with unlock status."""
+    unlocked = {p["pet_id"] for p in engine.db.get_unlocked_pets()}
+    pets = []
+    for pet_id, info in engine.db.PETS.items():
+        pets.append({
+            "id": pet_id,
+            **info,
+            "unlocked": pet_id in unlocked,
+        })
+    return JSONResponse({"pets": pets})
+
+
+@app.get("/api/pets/unlocked")
+async def api_get_unlocked_pets():
+    return JSONResponse({"pets": engine.db.get_unlocked_pets()})
+
+
+@app.post("/api/pets/check")
+async def api_check_pet_unlocks():
+    """Check and unlock any newly eligible pets."""
+    newly_eligible = engine.db.check_pet_eligibility()
+    new_pets = []
+    for pet_id in newly_eligible:
+        if engine.db.unlock_pet(pet_id):
+            new_pets.append(pet_id)
+    return JSONResponse({"new_pets": new_pets})
+
+
+# ══════════════════════════════════════════════════════════════════════
+# v3.0 — PERFORMANCE ANALYTICS
+# ══════════════════════════════════════════════════════════════════════
+
+@app.get("/api/performance")
+async def api_performance():
+    return JSONResponse(engine.db.get_performance_summary())
+
+
+@app.get("/api/performance/history")
+async def api_performance_history():
+    """Get daily performance over time."""
+    with engine.db._cursor() as cur:
+        cur.execute(
+            "SELECT date_key, words_learned, searches, exp_earned "
+            "FROM streaks ORDER BY date_key DESC LIMIT 30"
+        )
+        days = [dict(row) for row in cur.fetchall()]
+    return JSONResponse({"history": days})
+
+
+# ══════════════════════════════════════════════════════════════════════
+# v3.0 — WELCOME MESSAGES
+# ══════════════════════════════════════════════════════════════════════
+
+@app.get("/api/welcome")
+async def api_welcome():
+    """Get personalized welcome message."""
+    import random
+    name = engine.db.get_display_name()
+    streak = engine.db.get_streak_days()
+
+    messages = [
+        f"{name} returns!",
+        f"Welcome back, {name}!",
+        f"Ready to learn, {name}?",
+        f"Good to see you, {name}!",
+        f"Let's build your vocabulary, {name}!",
+        f"Knowledge awaits, {name}!",
+        f"Hey {name}, what shall we explore today?",
+        f"The scholar returns!",
+    ]
+
+    if streak > 0:
+        messages.extend([
+            f"{streak}-day streak! Keep going, {name}!",
+            f"On fire! {streak} days strong, {name}!",
+        ])
+
+    return JSONResponse({
+        "message": random.choice(messages),
+        "name": name,
+        "streak": streak,
+    })
 
 
 # ── WebSocket (realtime autocomplete) ─────────────────────────────────
@@ -434,3 +829,4 @@ def start():
 
 if __name__ == "__main__":
     start()
+
