@@ -566,3 +566,54 @@ Upload the chatlog...
 Updated `LEXI_CHAT_LOG.md` with all missing sessions (run project, iOS 26 rebuild, chatlog request). Committed and pushed to GitHub.
 
 ---
+
+## Session — 2026-03-08 01:13
+
+### 🧑 Prompt
+
+The app is missing below features:
+Flash card, Quiz, Saved words, Imported words/file management where it become a listed organized and user can decided to delete which words or the entire file (show where the word located), option to create flash card by imported word or file word (where user can choose how many word they want to create the flash card), Quiz will have multiple choice question and add wrong/right, explain to the user. performance tab where it analyze the user performance based on quiz, effort based on everything. add speech to text for the user, online mode (when user query a word that is not in the database, it will query it only via api to Cambridge dictionary and return the result, showing the method used below is online), streak feature where user study daily can unlock a streak with a pet (3 pets + a easter egg pet on ur choice when user first hit their 3 100% quiz), setting tab + account tab where user can customize their name, avatar and the app setting, Add a at the main screen of the app dynamic (random) welcome message that display user name (from setting), add audio pronunciation for each words for US and UK, ALL MUST FOLLOW THE EXISTING LIQUID GLASS DESIGN AND ANIMATION.
+
+### 🤖 Antigravity (Lexi) Response
+
+Implemented LexiCore v3.0 — a massive feature expansion across 4 phases:
+
+**Phase A — Backend (commit `7065136`, 924 insertions):**
+- Extended `db.py` from 207 to ~440 lines: 7 new SQLite tables (flashcard_decks, flashcard_cards, quiz_results, quiz_answers, imported_files, user_profile, pet_unlocks) + 30 CRUD methods
+- Created `cambridge.py` — online dictionary fallback using dictionaryapi.dev with US/UK audio pronunciation URLs
+- Expanded `main.py` to ~700 lines with ~20 new API endpoints:
+  - `/api/decks` CRUD, `/api/decks/{id}/cards` — flashcard management
+  - `/api/quiz/generate`, `/api/quiz/submit`, `/api/quiz/history` — quiz with MCQ
+  - `/api/import/file`, `/api/import/files` — file import management
+  - `/api/search/online` — Cambridge Dictionary online fallback
+  - `/api/pronounce` — US/UK pronunciation audio URLs
+  - `/api/profile` GET/PUT — user profile customization
+  - `/api/pets`, `/api/pets/check` — streak pet unlock system
+  - `/api/performance`, `/api/performance/history` — analytics
+  - `/api/welcome` — personalized welcome messages
+- Installed `python-multipart` for file upload support
+
+**Phase B — Flutter UI (commit `1d90b0a`, 2245 insertions, 8 files):**
+- Rewrote `main.dart` with 6-tab glass bottom navigation (Home, Cards, Quiz, Words, Stats, More)
+- 5 animated ambient orbs for iOS 26 liquid glass depth
+- Created 6 new pages:
+  - `home_page.dart` — welcome banner, search with online fallback, WOTD card, quick stats
+  - `flashcards_page.dart` — deck list, 3D card flip study mode, create deck dialog
+  - `quiz_page.dart` — start screen, MCQ with A/B/C/D, green/red feedback, explanations, results with pet unlock notification
+  - `saved_words_page.dart` — tabbed view (Saved + Imported), delete per word/file, create deck from saved words
+  - `performance_page.dart` — stats grid, quiz performance, flashcard stats, pet collection with emoji + unlock status, quiz history
+  - `settings_page.dart` — profile card, emoji avatar picker (12 options), display name field, app info
+- Expanded `engine_service.dart` from ~190 to ~450 lines with all v3.0 API methods
+
+**Pet System:**
+- 🦊 Ember Fox — 7-day streak
+- 🦉 Volt Owl — 30-day streak
+- 🐉 Aqua Dragon — 100-day streak
+- 🦄 Prisma (easter egg) — first 3 perfect quizzes
+
+**Verification:**
+- `flutter analyze` — 0 errors, 0 warnings (1 info suggestion)
+- Backend runs on port 8741, Flutter app builds and launches successfully
+- Pushed to GitHub: `4338bba..1d90b0a`
+
+---
