@@ -2,7 +2,6 @@
 /// Main entry point with Acrylic window + full search UI.
 library;
 
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_acrylic/flutter_acrylic.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -58,7 +57,6 @@ class _LexiCoreHomeState extends State<LexiCoreHome>
   double _autocompleteTimingMs = 0;
   bool _isSearching = false;
   bool _isWordSaved = false;
-  String _searchQuery = '';
 
   // Stats
   int _dictSize = 0;
@@ -113,7 +111,6 @@ class _LexiCoreHomeState extends State<LexiCoreHome>
   }
 
   void _onSearchChanged(String value) {
-    _searchQuery = value;
     if (value.length >= 2) {
       _engine.sendAutocomplete(value);
     } else {
