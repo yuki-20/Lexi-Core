@@ -643,3 +643,73 @@ UI should be like liquid glass (background is not liquid glass, just black with 
 - Pushed to GitHub: `a1c5210..9f70739`
 
 ---
+
+## Session — 2026-03-08 02:10
+
+### 🧑 Prompt
+
+Debug everything and make sure every functions/features are working properly.
+
+### 🤖 Response — v3.1 Debug Pass
+
+**Commit:** `5194c58` — 3 files, 50 insertions, 25 deletions
+
+#### Crashes Found & Fixed:
+
+1. **`AttributeError: 'UserDB' has no _conn()`** — `/api/projects` returned 500
+   - **Cause:** Project CRUD methods used `self._conn()` but `UserDB` uses `self._cursor()`
+   - **Fix:** Rewrote all 5 project methods in `db.py` (`get_projects`, `create_project`, `update_project`, `delete_project`, `get_project`) to use `self._cursor() as cur`
+
+2. **`OperationalError: table saved_words has no column named source_file`** — `/api/save` returned 500
+   - **Cause:** Existing SQLite DB was created before `source_file` column was added. `CREATE TABLE IF NOT EXISTS` doesn't ALTER existing tables
+   - **Fix:** Added migration logic in `_init_schema()` with `ALTER TABLE ADD COLUMN` wrapped in try/except for `source_file`, `audio_path`, `image_path`, `exp_earned`
+
+3. **Quiz missing `correct_index`** — Flutter read `q['correct_index'] as int` but field didn't exist
+   - **Cause:** `generate_quiz()` in `db.py` only returned `correct_answer` (string), not `correct_index` (integer)
+   - **Fix:** Added `"correct_index": options.index(correct)` to question dict
+
+4. **`_TypeError: Map is not subtype of String`** — HomePage crashed at WOTD display
+   - **Cause:** WOTD API returns `definition` as nested Map, but HomePage rendered it as plain Text string
+   - **Fix:** Added type check — if `def is Map`, extracts first item from `def['definitions']`
+
+---
+
+## Session — 2026-03-08 02:27
+
+### 🧑 Prompt
+
+Where's the pet section? Main UI should be like Claude with features on left side vertical, middle is search bar with welcome text. Also fix Quiz crash shown in screenshot.
+
+### 🤖 Response — v4.0 Claude-Style Sidebar
+
+**Commit:** `213099f` — 4 files, 520 insertions, 309 deletions
+
+#### Changes:
+
+1. **Sidebar Layout** (`main.dart`) — Replaced bottom nav with vertical glass sidebar:
+   - 72px collapsed (icons + active dot), 220px expanded on hover (icon + label + indicator bar)
+   - LexiCore branding at top (L → LexiCore animated CrossFade)
+   - Pet companion widget at bottom (emoji + name + streak counter)
+   - BackdropFilter blur + glass border styling
+
+2. **Centered Home** (`home_page.dart`) — Claude-style home view:
+   - 8 rotating welcome messages (random per session)
+   - Centered search bar (max 600px) with vertical centering
+   - Definition card appears below search on result
+   - WOTD + Quick Stats row at bottom
+
+3. **Quiz Null Fix** (`quiz_page.dart`) — `(q['correct_index'] as int?) ?? 0`
+
+#### Crashes During Development:
+
+- **Sidebar nav overflow (29-76px)** — Row with indicator bar + icon overflowed 43px collapsed constraint
+  - **Fix:** Split into two layouts — expanded Row vs. collapsed Center(Column(icon + dot))
+- **Quiz `Null is not subtype of int`** persisted after hot restart — old quiz data in memory didn't have `correct_index`
+  - **Fix:** Full backend restart (fresh process serves new quiz data with `correct_index`)
+
+**Verification:**
+- Backend: all API calls return 200 OK (pets, stats, wotd, projects, decks, websocket)
+- Flutter: clean cold launch, no exceptions
+- Commit `213099f`, pushed `5194c58..213099f`
+
+---
