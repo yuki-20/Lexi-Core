@@ -52,7 +52,7 @@ class _QuizPageState extends State<QuizPage> {
   void _selectOption(int index) {
     if (_answered) return;
     final q = _questions[_qIndex];
-    final correct = q['correct_index'] as int;
+    final correct = (q['correct_index'] as int?) ?? 0;
 
     setState(() {
       _selectedOption = index;
@@ -152,7 +152,7 @@ class _QuizPageState extends State<QuizPage> {
   Widget _buildQuestion() {
     final q = _questions[_qIndex];
     final options = List<String>.from(q['options']);
-    final correct = q['correct_index'] as int;
+    final correct = (q['correct_index'] as int?) ?? 0;
     final progress = (_qIndex + 1) / _questions.length;
 
     return SingleChildScrollView(

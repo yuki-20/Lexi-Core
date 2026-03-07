@@ -31,3 +31,6 @@ build/
 
 # Tauri
 ui/src-tauri/target/
+
+data/*.db-shm
+data/*.db-wal

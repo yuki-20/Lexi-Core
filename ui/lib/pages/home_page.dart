@@ -1,7 +1,8 @@
-/// LexiCore — Home Page (v3.1)
-/// Personalized dashboard with glass design, staggered animations.
+/// LexiCore — Home Page (v4.0)
+/// Centered search with rotating welcome text, Claude-style layout.
 library;
 
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../theme/liquid_glass_theme.dart';
@@ -24,24 +25,36 @@ class _HomePageState extends State<HomePage> {
   List<String> _suggestions = [];
   Map<String, dynamic>? _wotd;
   Map<String, dynamic>? _stats;
-  String _welcomeMsg = '';
   bool _isLoading = false;
   bool _isSaved = false;
+
+  // Rotating welcome messages
+  static const _welcomeMessages = [
+    'What shall we explore today?',
+    'Ready to expand your vocabulary?',
+    'Every word is a new adventure ✨',
+    'Curiosity is the spark of learning 🔥',
+    'Let\'s discover something new together',
+    'Your vocabulary journey continues...',
+    'Words shape the way we think 💡',
+    'What word are you curious about?',
+  ];
+
+  late final String _welcomeText;
 
   @override
   void initState() {
     super.initState();
     _engine.connectWebSocket();
+    _welcomeText = _welcomeMessages[Random().nextInt(_welcomeMessages.length)];
     _loadData();
   }
 
   Future<void> _loadData() async {
-    final welcome = await _engine.getWelcome();
     final stats = await _engine.getStats();
     final wotd = await _engine.getWordOfTheDay();
     if (mounted) {
       setState(() {
-        _welcomeMsg = welcome['message'] ?? 'Welcome!';
         _stats = stats;
         _wotd = wotd;
       });
@@ -53,8 +66,6 @@ class _HomePageState extends State<HomePage> {
     setState(() { _isLoading = true; _suggestions = []; });
 
     var result = await _engine.searchExact(query);
-
-    // Online fallback
     if (!result.found) {
       result = await _engine.searchOnline(query);
     }
@@ -86,34 +97,45 @@ class _HomePageState extends State<HomePage> {
 
   @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(24, 20, 24, 120),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // ── Welcome Banner ──
-          Text(
-            _welcomeMsg,
-            style: LiquidGlassTheme.heading.copyWith(fontSize: 26),
-          ).animate().fadeIn(duration: 500.ms).slideX(begin: -0.04, end: 0),
-          const SizedBox(height: 6),
-          Text(
-            'What would you like to learn today?',
-            style: LiquidGlassTheme.body,
-          ).animate().fadeIn(delay: 150.ms, duration: 400.ms),
-          const SizedBox(height: 28),
+    final hasResult = _result != null && _result!.found;
 
-          // ── Search Bar ──
-          lexi.SearchBar(
-            onSearch: _onSearch,
-            onChanged: _onSearchChanged,
-            isLoading: _isLoading,
-          ).animate().fadeIn(delay: 250.ms, duration: 400.ms).slideY(begin: 0.05, end: 0),
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(40, 0, 40, 40),
+      child: Column(
+        children: [
+          // ── Centered Welcome + Search ──
+          SizedBox(
+            height: hasResult ? 180 : 280,
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  _welcomeText,
+                  style: LiquidGlassTheme.heading.copyWith(
+                    fontSize: hasResult ? 20 : 28,
+                    fontWeight: FontWeight.w300,
+                    letterSpacing: -0.5,
+                  ),
+                  textAlign: TextAlign.center,
+                ).animate().fadeIn(duration: 600.ms),
+                SizedBox(height: hasResult ? 16 : 28),
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 600),
+                  child: lexi.SearchBar(
+                    onSearch: _onSearch,
+                    onChanged: _onSearchChanged,
+                    isLoading: _isLoading,
+                  ),
+                ).animate().fadeIn(delay: 200.ms, duration: 400.ms)
+                 .slideY(begin: 0.05, end: 0),
+              ],
+            ),
+          ),
 
           // ── Autocomplete ──
           if (_suggestions.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(top: 4),
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 600),
               child: AutocompleteDropdown(
                 suggestions: _suggestions,
                 onSelect: (word) {
@@ -123,120 +145,136 @@ class _HomePageState extends State<HomePage> {
               ),
             ),
 
-          const SizedBox(height: 20),
-
           // ── Definition Card ──
-          if (_result != null && _result!.found)
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                DefinitionCard(
-                  result: _result!,
-                  onSave: _onSaveWord,
-                  isSaved: _isSaved,
-                ).animate().fadeIn(duration: 400.ms).slideY(begin: 0.05, end: 0),
-                if (_result!.source != null)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 10),
-                    child: Row(
-                      children: [
-                        Icon(
-                          _result!.source == 'online' ? Icons.cloud_outlined : Icons.storage_outlined,
-                          size: 14,
-                          color: _result!.source == 'online'
-                              ? LiquidGlassTheme.accentSecondary
-                              : LiquidGlassTheme.textMuted,
-                        ),
-                        const SizedBox(width: 6),
-                        Text(
-                          _result!.source == 'online' ? 'Online result' : _result!.source ?? '',
-                          style: LiquidGlassTheme.bodySmall.copyWith(
+          if (hasResult)
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 700),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  DefinitionCard(
+                    result: _result!,
+                    onSave: _onSaveWord,
+                    isSaved: _isSaved,
+                  ).animate().fadeIn(duration: 400.ms).slideY(begin: 0.05, end: 0),
+                  if (_result!.source != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 10),
+                      child: Row(
+                        children: [
+                          Icon(
+                            _result!.source == 'online' ? Icons.cloud_outlined : Icons.storage_outlined,
+                            size: 14,
                             color: _result!.source == 'online'
                                 ? LiquidGlassTheme.accentSecondary
                                 : LiquidGlassTheme.textMuted,
                           ),
+                          const SizedBox(width: 6),
+                          Text(
+                            _result!.source == 'online' ? 'Online result' : _result!.source ?? '',
+                            style: LiquidGlassTheme.bodySmall.copyWith(
+                              color: _result!.source == 'online'
+                                  ? LiquidGlassTheme.accentSecondary
+                                  : LiquidGlassTheme.textMuted,
+                            ),
+                          ),
+                        ],
+                      ).animate().fadeIn(delay: 200.ms),
+                    ),
+                  const SizedBox(height: 28),
+                ],
+              ),
+            ),
+
+          // ── Bottom Row: WOTD + Stats ──
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 700),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // ── Word of the Day ──
+                if (_wotd != null && _wotd!['word'] != null)
+                  Expanded(
+                    flex: 3,
+                    child: GlassPanel(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              const Text('✨', style: TextStyle(fontSize: 18)),
+                              const SizedBox(width: 8),
+                              Text('Word of the Day',
+                                style: LiquidGlassTheme.label.copyWith(
+                                  color: LiquidGlassTheme.accentPrimary,
+                                  letterSpacing: 1.0,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          Text(
+                            _wotd!['word'] ?? '',
+                            style: LiquidGlassTheme.headingSm,
+                          ),
+                          const SizedBox(height: 6),
+                          Builder(builder: (_) {
+                            final def = _wotd!['definition'];
+                            String text = '';
+                            if (def is Map) {
+                              final defs = def['definitions'] as List?;
+                              text = (defs != null && defs.isNotEmpty)
+                                  ? defs.first.toString()
+                                  : '';
+                            } else if (def != null) {
+                              text = def.toString();
+                            }
+                            if (text.isEmpty) return const SizedBox.shrink();
+                            return Text(
+                              text,
+                              style: LiquidGlassTheme.body,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            );
+                          }),
+                        ],
+                      ),
+                    ).animate().fadeIn(delay: 400.ms, duration: 500.ms)
+                     .slideY(begin: 0.06, end: 0),
+                  ),
+
+                if (_wotd != null && _stats != null) const SizedBox(width: 14),
+
+                // ── Quick Stats Column ──
+                if (_stats != null && _stats!.isNotEmpty)
+                  Expanded(
+                    flex: 2,
+                    child: Column(
+                      children: [
+                        _QuickStat(
+                          icon: Icons.menu_book_rounded,
+                          label: 'Dictionary',
+                          value: '${_stats!['dictionary_size'] ?? 0}',
+                        ),
+                        const SizedBox(height: 10),
+                        _QuickStat(
+                          icon: Icons.local_fire_department_rounded,
+                          label: 'Streak',
+                          value: '${(_stats!['learning'] as Map?)?['streak_days'] ?? 0}d',
+                        ),
+                        const SizedBox(height: 10),
+                        _QuickStat(
+                          icon: Icons.bolt_rounded,
+                          label: 'EXP',
+                          value: '${(_stats!['learning'] as Map?)?['total_exp'] ?? 0}',
                         ),
                       ],
-                    ).animate().fadeIn(delay: 200.ms),
+                    ).animate().fadeIn(delay: 500.ms, duration: 400.ms)
+                     .slideY(begin: 0.05, end: 0),
                   ),
               ],
             ),
-
-          // ── Word of the Day ──
-          if (_wotd != null && _wotd!['word'] != null) ...[
-            const SizedBox(height: 28),
-            GlassPanel(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      const Text('✨', style: TextStyle(fontSize: 20)),
-                      const SizedBox(width: 8),
-                      Text('Word of the Day',
-                        style: LiquidGlassTheme.label.copyWith(
-                          color: LiquidGlassTheme.accentPrimary,
-                          letterSpacing: 1.2,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    _wotd!['word'] ?? '',
-                    style: LiquidGlassTheme.headingSm,
-                  ),
-                  if (_wotd!['definition'] != null) ...[
-                    const SizedBox(height: 6),
-                    Builder(builder: (_) {
-                      final def = _wotd!['definition'];
-                      String text;
-                      if (def is Map) {
-                        final defs = def['definitions'] as List?;
-                        text = (defs != null && defs.isNotEmpty) ? defs.first.toString() : def.toString();
-                      } else {
-                        text = def.toString();
-                      }
-                      return Text(
-                        text,
-                        style: LiquidGlassTheme.body,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      );
-                    }),
-                  ],
-                ],
-              ),
-            ).animate().fadeIn(delay: 400.ms, duration: 500.ms)
-             .slideY(begin: 0.08, end: 0),
-          ],
-
-          // ── Quick Stats ──
-          if (_stats != null && _stats!.isNotEmpty) ...[
-            const SizedBox(height: 22),
-            Row(
-              children: [
-                _QuickStat(
-                  icon: Icons.menu_book_rounded,
-                  label: 'Words',
-                  value: '${_stats!['dictionary_size'] ?? 0}',
-                ),
-                const SizedBox(width: 14),
-                _QuickStat(
-                  icon: Icons.local_fire_department_rounded,
-                  label: 'Streak',
-                  value: '${(_stats!['learning'] as Map?)?['streak_days'] ?? 0}d',
-                ),
-                const SizedBox(width: 14),
-                _QuickStat(
-                  icon: Icons.bolt_rounded,
-                  label: 'EXP',
-                  value: '${(_stats!['learning'] as Map?)?['total_exp'] ?? 0}',
-                ),
-              ],
-            ).animate().fadeIn(delay: 500.ms, duration: 400.ms)
-             .slideY(begin: 0.05, end: 0),
-          ],
+          ),
         ],
       ),
     );
@@ -251,19 +289,23 @@ class _QuickStat extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Expanded(
-      child: GlassPanel(
-        padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 14),
-        borderRadius: LiquidGlassTheme.borderRadiusSm,
-        child: Column(
-          children: [
-            Icon(icon, size: 22, color: LiquidGlassTheme.accentPrimary),
-            const SizedBox(height: 8),
-            Text(value, style: LiquidGlassTheme.headingSm.copyWith(fontSize: 17)),
-            const SizedBox(height: 2),
-            Text(label, style: LiquidGlassTheme.bodySmall),
-          ],
-        ),
+    return GlassPanel(
+      padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+      borderRadius: LiquidGlassTheme.borderRadiusSm,
+      child: Row(
+        children: [
+          Icon(icon, size: 18, color: LiquidGlassTheme.accentPrimary),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(value, style: LiquidGlassTheme.headingSm.copyWith(fontSize: 16)),
+                Text(label, style: LiquidGlassTheme.bodySmall),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
