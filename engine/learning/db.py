@@ -176,6 +176,20 @@ class UserDB:
     def _init_schema(self) -> None:
         conn = self._connect()
         conn.executescript(_SCHEMA)
+        # ── Migrations for existing DBs ──
+        # ALTER TABLE won't error if we catch it; new columns may not exist in old DBs
+        migrations = [
+            "ALTER TABLE saved_words ADD COLUMN source_file TEXT",
+            "ALTER TABLE saved_words ADD COLUMN audio_path TEXT",
+            "ALTER TABLE saved_words ADD COLUMN image_path TEXT",
+            "ALTER TABLE streaks ADD COLUMN exp_earned INTEGER NOT NULL DEFAULT 0",
+        ]
+        for sql in migrations:
+            try:
+                conn.execute(sql)
+            except Exception:
+                pass  # column already exists, safe to ignore
+        conn.commit()
         conn.close()
 
     # ── Search History ────────────────────────────────────────────────
@@ -431,7 +445,7 @@ class UserDB:
     def generate_quiz(self, words: list[dict], count: int = 10) -> list[dict]:
         """Generate multiple-choice questions from word list.
 
-        Each item: {word, correct_answer, options: [4 choices], explanation}
+        Each item: {word, correct_answer, correct_index, options: [4 choices], explanation}
         """
         if len(words) < 4:
             return []
@@ -455,6 +469,7 @@ class UserDB:
             questions.append({
                 "word": word,
                 "correct_answer": correct,
+                "correct_index": options.index(correct),
                 "options": options,
                 "explanation": f"'{word}' means: {correct}",
             })
@@ -622,28 +637,28 @@ class UserDB:
     # ── Projects ─────────────────────────────────────────────────
 
     def get_projects(self) -> list[dict]:
-        with self._conn() as conn:
-            cur = conn.execute(
+        with self._cursor() as cur:
+            cur.execute(
                 "SELECT id, name, description, color, icon, created_at FROM projects ORDER BY created_at DESC"
             )
             projects = [dict(r) for r in cur.fetchall()]
             for p in projects:
-                cur2 = conn.execute(
+                cur.execute(
                     "SELECT COUNT(*) as cnt FROM flashcard_decks WHERE source = ?",
                     (f"project:{p['id']}",)
                 )
-                p["deck_count"] = cur2.fetchone()["cnt"]
-                cur3 = conn.execute(
+                p["deck_count"] = cur.fetchone()["cnt"]
+                cur.execute(
                     "SELECT COUNT(*) as cnt FROM quiz_results WHERE deck_id IN "
                     "(SELECT id FROM flashcard_decks WHERE source = ?)",
                     (f"project:{p['id']}",)
                 )
-                p["quiz_count"] = cur3.fetchone()["cnt"]
+                p["quiz_count"] = cur.fetchone()["cnt"]
             return projects
 
     def create_project(self, name: str, description: str = "", color: str = "#7C4DFF", icon: str = "folder") -> int:
-        with self._conn() as conn:
-            cur = conn.execute(
+        with self._cursor() as cur:
+            cur.execute(
                 "INSERT INTO projects (name, description, color, icon) VALUES (?, ?, ?, ?)",
                 (name, description, color, icon)
             )
@@ -656,27 +671,27 @@ class UserDB:
             return False
         set_clause = ", ".join(f"{k} = ?" for k in updates)
         values = list(updates.values()) + [project_id]
-        with self._conn() as conn:
-            conn.execute(f"UPDATE projects SET {set_clause} WHERE id = ?", values)
+        with self._cursor() as cur:
+            cur.execute(f"UPDATE projects SET {set_clause} WHERE id = ?", values)
         return True
 
     def delete_project(self, project_id: int) -> bool:
-        with self._conn() as conn:
-            conn.execute(
+        with self._cursor() as cur:
+            cur.execute(
                 "DELETE FROM flashcard_cards WHERE deck_id IN "
                 "(SELECT id FROM flashcard_decks WHERE source = ?)",
                 (f"project:{project_id}",)
             )
-            conn.execute(
+            cur.execute(
                 "DELETE FROM flashcard_decks WHERE source = ?",
                 (f"project:{project_id}",)
             )
-            conn.execute("DELETE FROM projects WHERE id = ?", (project_id,))
+            cur.execute("DELETE FROM projects WHERE id = ?", (project_id,))
         return True
 
     def get_project(self, project_id: int) -> dict | None:
-        with self._conn() as conn:
-            cur = conn.execute(
+        with self._cursor() as cur:
+            cur.execute(
                 "SELECT id, name, description, color, icon, created_at FROM projects WHERE id = ?",
                 (project_id,)
             )
@@ -684,9 +699,9 @@ class UserDB:
             if not row:
                 return None
             p = dict(row)
-            cur2 = conn.execute(
+            cur.execute(
                 "SELECT id, name, source, created_at FROM flashcard_decks WHERE source = ?",
                 (f"project:{project_id}",)
             )
-            p["decks"] = [dict(r) for r in cur2.fetchall()]
+            p["decks"] = [dict(r) for r in cur.fetchall()]
             return p

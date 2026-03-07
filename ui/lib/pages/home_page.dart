@@ -188,12 +188,22 @@ class _HomePageState extends State<HomePage> {
                   ),
                   if (_wotd!['definition'] != null) ...[
                     const SizedBox(height: 6),
-                    Text(
-                      _wotd!['definition'],
-                      style: LiquidGlassTheme.body,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
+                    Builder(builder: (_) {
+                      final def = _wotd!['definition'];
+                      String text;
+                      if (def is Map) {
+                        final defs = def['definitions'] as List?;
+                        text = (defs != null && defs.isNotEmpty) ? defs.first.toString() : def.toString();
+                      } else {
+                        text = def.toString();
+                      }
+                      return Text(
+                        text,
+                        style: LiquidGlassTheme.body,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      );
+                    }),
                   ],
                 ],
               ),
