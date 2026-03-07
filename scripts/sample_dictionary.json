@@ -1,0 +1,410 @@
+{
+    "hello": {
+        "pos": [
+            "interjection",
+            "noun"
+        ],
+        "definitions": [
+            "Used as a greeting or to begin a phone conversation",
+            "An utterance of hello; a greeting"
+        ],
+        "synonyms": [
+            "hi",
+            "hey",
+            "greetings",
+            "salutation"
+        ],
+        "examples": [
+            "Hello there, how are you?",
+            "She gave a cheerful hello to everyone"
+        ],
+        "etymology": "From Old English 'hāl', meaning healthy or whole"
+    },
+    "world": {
+        "pos": [
+            "noun"
+        ],
+        "definitions": [
+            "The earth, together with all of its countries, peoples, and natural features",
+            "A particular region or group of countries",
+            "Human and social interaction"
+        ],
+        "synonyms": [
+            "earth",
+            "globe",
+            "planet",
+            "universe"
+        ],
+        "examples": [
+            "He traveled around the world",
+            "The industrialized world"
+        ],
+        "etymology": "From Old English 'woruld', meaning human existence"
+    },
+    "algorithm": {
+        "pos": [
+            "noun"
+        ],
+        "definitions": [
+            "A process or set of rules to be followed in calculations or other problem-solving operations, especially by a computer"
+        ],
+        "synonyms": [
+            "procedure",
+            "method",
+            "formula",
+            "routine"
+        ],
+        "examples": [
+            "The algorithm sorts the data in linear time",
+            "Search algorithms power the internet"
+        ],
+        "etymology": "From the name of Persian mathematician al-Khwarizmi"
+    },
+    "python": {
+        "pos": [
+            "noun"
+        ],
+        "definitions": [
+            "A large heavy-bodied nonvenomous snake",
+            "A high-level general-purpose programming language"
+        ],
+        "synonyms": [
+            "snake",
+            "serpent",
+            "constrictor"
+        ],
+        "examples": [
+            "The python coiled around the branch",
+            "Python is widely used in data science"
+        ],
+        "etymology": "From Latin 'Python', from Greek mythology"
+    },
+    "dictionary": {
+        "pos": [
+            "noun"
+        ],
+        "definitions": [
+            "A book or electronic resource that lists the words of a language and gives their meaning",
+            "A reference book on a particular subject"
+        ],
+        "synonyms": [
+            "lexicon",
+            "glossary",
+            "vocabulary",
+            "wordbook"
+        ],
+        "examples": [
+            "I looked up the word in the dictionary",
+            "A dictionary of computing"
+        ],
+        "etymology": "From Medieval Latin 'dictionarium', from Latin 'dictio' meaning word"
+    },
+    "search": {
+        "pos": [
+            "verb",
+            "noun"
+        ],
+        "definitions": [
+            "To try to find something by looking carefully",
+            "An act of searching for something"
+        ],
+        "synonyms": [
+            "seek",
+            "look for",
+            "hunt",
+            "explore",
+            "quest"
+        ],
+        "examples": [
+            "She searched the entire house",
+            "A thorough search of the area"
+        ],
+        "etymology": "From Old French 'cerchier', from Latin 'circare' meaning to go around"
+    },
+    "engine": {
+        "pos": [
+            "noun"
+        ],
+        "definitions": [
+            "A machine with moving parts that converts power into motion",
+            "A thing that is the agent or instrument of a particular process"
+        ],
+        "synonyms": [
+            "motor",
+            "machine",
+            "mechanism",
+            "turbine"
+        ],
+        "examples": [
+            "The car has a powerful engine",
+            "The search engine returns results instantly"
+        ],
+        "etymology": "From Old French 'engin', from Latin 'ingenium' meaning talent"
+    },
+    "trie": {
+        "pos": [
+            "noun"
+        ],
+        "definitions": [
+            "A tree-like data structure used for efficient retrieval of keys in a dataset of strings, also called a prefix tree"
+        ],
+        "synonyms": [
+            "prefix tree",
+            "digital tree",
+            "radix tree"
+        ],
+        "examples": [
+            "The autocomplete feature uses a trie for fast prefix matching"
+        ],
+        "etymology": "From 'retrieval', coined by Edward Fredkin in 1960"
+    },
+    "bloom": {
+        "pos": [
+            "noun",
+            "verb"
+        ],
+        "definitions": [
+            "A flower, especially one cultivated for its beauty",
+            "To produce flowers; to be in flower",
+            "A state or period of greatest beauty or productivity"
+        ],
+        "synonyms": [
+            "flower",
+            "blossom",
+            "flourish",
+            "thrive"
+        ],
+        "examples": [
+            "The roses are in bloom",
+            "The garden bloomed in spring"
+        ],
+        "etymology": "From Old Norse 'blóm', meaning flower"
+    },
+    "cache": {
+        "pos": [
+            "noun",
+            "verb"
+        ],
+        "definitions": [
+            "A collection of items of the same type stored in a hidden place",
+            "A high-speed storage mechanism for frequently accessed data",
+            "To store data in a cache"
+        ],
+        "synonyms": [
+            "store",
+            "stockpile",
+            "reserve",
+            "hoard"
+        ],
+        "examples": [
+            "The browser cache speeds up page loading",
+            "He cached the supplies in the cave"
+        ],
+        "etymology": "From French 'cacher', meaning to hide"
+    },
+    "physics": {
+        "pos": [
+            "noun"
+        ],
+        "definitions": [
+            "The branch of science concerned with the nature and properties of matter and energy"
+        ],
+        "synonyms": [
+            "natural science",
+            "physical science"
+        ],
+        "examples": [
+            "She studied physics at university",
+            "The physics of sound waves"
+        ],
+        "etymology": "From Latin 'physica', from Greek 'phusike' meaning natural science"
+    },
+    "music": {
+        "pos": [
+            "noun"
+        ],
+        "definitions": [
+            "Vocal or instrumental sounds combined in such a way as to produce beauty of form, harmony, and expression of emotion"
+        ],
+        "synonyms": [
+            "melody",
+            "harmony",
+            "rhythm",
+            "tune",
+            "song"
+        ],
+        "examples": [
+            "He listened to classical music",
+            "She has a talent for music"
+        ],
+        "etymology": "From Old French 'musique', from Latin 'musica', from Greek 'mousike'"
+    },
+    "beautiful": {
+        "pos": [
+            "adjective"
+        ],
+        "definitions": [
+            "Pleasing the senses or mind aesthetically",
+            "Of a very high standard; excellent"
+        ],
+        "synonyms": [
+            "attractive",
+            "gorgeous",
+            "stunning",
+            "lovely",
+            "pretty"
+        ],
+        "examples": [
+            "A beautiful sunset over the ocean",
+            "She wrote a beautiful poem"
+        ],
+        "etymology": "From Middle English 'beautefull', from 'beaute' meaning beauty"
+    },
+    "knowledge": {
+        "pos": [
+            "noun"
+        ],
+        "definitions": [
+            "Facts, information, and skills acquired through experience or education",
+            "The theoretical or practical understanding of a subject"
+        ],
+        "synonyms": [
+            "understanding",
+            "wisdom",
+            "learning",
+            "expertise",
+            "scholarship"
+        ],
+        "examples": [
+            "A thirst for knowledge",
+            "His knowledge of history is impressive"
+        ],
+        "etymology": "From Middle English 'knowleche', from 'knowen' meaning to know"
+    },
+    "vocabulary": {
+        "pos": [
+            "noun"
+        ],
+        "definitions": [
+            "The body of words used in a particular language",
+            "The body of words known to an individual person",
+            "A list of difficult or unfamiliar words with an explanation of their meanings"
+        ],
+        "synonyms": [
+            "lexicon",
+            "wordbook",
+            "glossary",
+            "terminology"
+        ],
+        "examples": [
+            "She has an extensive vocabulary",
+            "Expand your vocabulary by reading widely"
+        ],
+        "etymology": "From Medieval Latin 'vocabularium', from Latin 'vocabulum' meaning word"
+    },
+    "serendipity": {
+        "pos": [
+            "noun"
+        ],
+        "definitions": [
+            "The occurrence and development of events by chance in a happy or beneficial way",
+            "Good fortune; lucky discoveries"
+        ],
+        "synonyms": [
+            "luck",
+            "chance",
+            "fortune",
+            "providence",
+            "coincidence"
+        ],
+        "examples": [
+            "A fortunate stroke of serendipity",
+            "Their meeting was pure serendipity"
+        ],
+        "etymology": "Coined by Horace Walpole in 1754, from the fairy tale 'The Three Princes of Serendip'"
+    },
+    "ephemeral": {
+        "pos": [
+            "adjective"
+        ],
+        "definitions": [
+            "Lasting for a very short time",
+            "Having a very short life cycle"
+        ],
+        "synonyms": [
+            "transient",
+            "fleeting",
+            "momentary",
+            "brief",
+            "temporary"
+        ],
+        "examples": [
+            "The ephemeral beauty of cherry blossoms",
+            "Fame can be ephemeral"
+        ],
+        "etymology": "From Greek 'ephemeros', meaning lasting only a day"
+    },
+    "eloquent": {
+        "pos": [
+            "adjective"
+        ],
+        "definitions": [
+            "Fluent or persuasive in speaking or writing",
+            "Clearly expressing or indicating something"
+        ],
+        "synonyms": [
+            "articulate",
+            "expressive",
+            "fluent",
+            "persuasive",
+            "silver-tongued"
+        ],
+        "examples": [
+            "An eloquent speech moved the audience",
+            "Her silence was more eloquent than words"
+        ],
+        "etymology": "From Latin 'eloquentem', from 'eloqui' meaning to speak out"
+    },
+    "resilience": {
+        "pos": [
+            "noun"
+        ],
+        "definitions": [
+            "The capacity to recover quickly from difficulties; toughness",
+            "The ability of a substance to spring back into shape; elasticity"
+        ],
+        "synonyms": [
+            "toughness",
+            "flexibility",
+            "adaptability",
+            "strength",
+            "grit"
+        ],
+        "examples": [
+            "The resilience of the human spirit",
+            "The material shows great resilience"
+        ],
+        "etymology": "From Latin 'resilire', meaning to leap back"
+    },
+    "ubiquitous": {
+        "pos": [
+            "adjective"
+        ],
+        "definitions": [
+            "Present, appearing, or found everywhere",
+            "Existing or being everywhere at the same time"
+        ],
+        "synonyms": [
+            "omnipresent",
+            "pervasive",
+            "universal",
+            "widespread",
+            "everywhere"
+        ],
+        "examples": [
+            "Mobile phones have become ubiquitous",
+            "The ubiquitous smell of coffee"
+        ],
+        "etymology": "From Latin 'ubique', meaning everywhere"
+    }
+}

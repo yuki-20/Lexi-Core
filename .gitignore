@@ -10,7 +10,24 @@ Thumbs.db
 node_modules/
 __pycache__/
 *.pyc
+.venv/
+venv/
 
 # Environment
 .env
 .env.local
+
+# Runtime data (generated)
+data/index.data
+data/meaning.bin
+data/user_progress.db
+data/media_cache/
+
+# Build artifacts
+dist/
+target/
+*.egg-info/
+build/
+
+# Tauri
+ui/src-tauri/target/
