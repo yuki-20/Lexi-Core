@@ -57,42 +57,50 @@ class _PerformancePageState extends State<PerformancePage> {
 
   Future<void> _loadData() async {
     try {
-      final stats = await _engine.getStats();
-      final performance = await _engine.getPerformance();
-      final xpStatus = await _engine.getXpStatus();
-      final pets = await _engine.getAllPets();
-      final saved = await _engine.getSavedWords();
+      // Fire ALL requests in parallel instead of sequentially
+      final results = await Future.wait([
+        _engine.getStats().timeout(const Duration(seconds: 5), onTimeout: () => <String, dynamic>{}),
+        _engine.getPerformance().timeout(const Duration(seconds: 5), onTimeout: () => <String, dynamic>{}),
+        _engine.getXpStatus().timeout(const Duration(seconds: 5), onTimeout: () => <String, dynamic>{}),
+        _engine.getAllPets().timeout(const Duration(seconds: 5), onTimeout: () => <Map<String, dynamic>>[]),
+        _engine.getSavedWords().timeout(const Duration(seconds: 5), onTimeout: () => <Map<String, dynamic>>[]),
+        _engine.getQuests().timeout(const Duration(seconds: 5), onTimeout: () => <Map<String, dynamic>>[]),
+      ]);
 
-      if (mounted) {
-        final learning = stats['learning'] as Map? ?? {};
-        final quizPerf = performance['quiz'] as Map? ?? {};
+      if (!mounted) return;
 
-        setState(() {
-          _dictSize = (stats['dictionary_size'] as num?)?.toInt() ?? 0;
-          _streakDays = (learning['streak_days'] as num?)?.toInt() ?? 0;
-          _totalExp = (learning['total_exp'] as num?)?.toInt() ?? 0;
-          _wordsSaved = saved.length;
-          _searchCount = (performance['total_searches'] as num?)?.toInt() ?? 0;
+      final stats = results[0] as Map<String, dynamic>;
+      final performance = results[1] as Map<String, dynamic>;
+      final xpStatus = results[2] as Map<String, dynamic>;
+      final pets = results[3] as List;
+      final saved = results[4] as List;
+      final quests = results[5] as List;
 
-          _level = (xpStatus['level'] as num?)?.toInt() ?? 1;
-          _levelTitle = xpStatus['title']?.toString() ?? 'Novice';
-          _xpProgress = (xpStatus['progress'] as num?)?.toDouble() ?? 0.0;
-          _xpIntoLevel = (xpStatus['xp_into_level'] as num?)?.toInt() ?? 0;
-          _xpForNext = (xpStatus['xp_for_next'] as num?)?.toInt() ?? 100;
+      final learning = stats['learning'] as Map? ?? {};
+      final quizPerf = performance['quiz'] as Map? ?? {};
 
-          _quizzesTaken = (quizPerf['total_quizzes'] as num?)?.toInt() ?? 0;
-          _quizCorrect = (quizPerf['correct_answers'] as num?)?.toInt() ?? 0;
-          _quizTotal = (quizPerf['total_answers'] as num?)?.toInt() ?? 0;
+      setState(() {
+        _dictSize = (stats['dictionary_size'] as num?)?.toInt() ?? 0;
+        _streakDays = (learning['streak_days'] as num?)?.toInt() ?? 0;
+        _totalExp = (learning['total_exp'] as num?)?.toInt() ?? 0;
+        _wordsSaved = saved.length;
+        _searchCount = (performance['total_searches'] as num?)?.toInt() ?? 0;
 
-          _pets = List<Map<String, dynamic>>.from(pets);
+        _level = (xpStatus['level'] as num?)?.toInt() ?? 1;
+        _levelTitle = xpStatus['title']?.toString() ?? 'Novice';
+        _xpProgress = (xpStatus['progress'] as num?)?.toDouble() ?? 0.0;
+        _xpIntoLevel = (xpStatus['xp_into_level'] as num?)?.toInt() ?? 0;
+        _xpForNext = (xpStatus['xp_for_next'] as num?)?.toInt() ?? 100;
 
-          _loading = false;
-        });
+        _quizzesTaken = (quizPerf['total_quizzes'] as num?)?.toInt() ?? 0;
+        _quizCorrect = (quizPerf['correct_answers'] as num?)?.toInt() ?? 0;
+        _quizTotal = (quizPerf['total_answers'] as num?)?.toInt() ?? 0;
 
-        // Load quests (after setState to avoid await-in-setState)
-        final quests = await _engine.getQuests();
-        if (mounted) setState(() => _quests = quests);
-      }
+        _pets = List<Map<String, dynamic>>.from(pets);
+        _quests = List<Map<String, dynamic>>.from(quests);
+
+        _loading = false;
+      });
     } catch (_) {
       if (mounted) setState(() => _loading = false);
     }

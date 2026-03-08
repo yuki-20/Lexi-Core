@@ -36,31 +36,40 @@ class _DictionaryPageState extends State<DictionaryPage> {
   }
 
   Future<void> _loadLetters() async {
-    final data = await _engine.getDictionaryLetters();
-    if (mounted) {
-      final letters = (data['letters'] as Map<String, dynamic>?) ?? {};
-      setState(() {
-        _letterCounts = letters.map((k, v) => MapEntry(k, v as int));
-        _totalWords = data['total'] as int? ?? 0;
-      });
-      _loadWords();
+    try {
+      final data = await _engine.getDictionaryLetters()
+          .timeout(const Duration(seconds: 5), onTimeout: () => <String, dynamic>{'letters': <String, dynamic>{}, 'total': 0});
+      if (mounted) {
+        final letters = (data['letters'] as Map<String, dynamic>?) ?? {};
+        setState(() {
+          _letterCounts = letters.map((k, v) => MapEntry(k, v as int));
+          _totalWords = data['total'] as int? ?? 0;
+        });
+        _loadWords();
+      }
+    } catch (_) {
+      if (mounted) setState(() => _loading = false);
     }
   }
 
   Future<void> _loadWords({int page = 1}) async {
     setState(() => _loading = true);
-    final data = await _engine.getDictionaryWords(
-      letter: _selectedLetter,
-      page: page,
-      limit: 100,
-    );
-    if (mounted) {
-      setState(() {
-        _words = List<String>.from(data['words'] ?? []);
-        _currentPage = data['page'] as int? ?? 1;
-        _totalPages = data['pages'] as int? ?? 0;
-        _loading = false;
-      });
+    try {
+      final data = await _engine.getDictionaryWords(
+        letter: _selectedLetter,
+        page: page,
+        limit: 100,
+      ).timeout(const Duration(seconds: 5), onTimeout: () => <String, dynamic>{'words': <String>[], 'page': 1, 'pages': 0});
+      if (mounted) {
+        setState(() {
+          _words = List<String>.from(data['words'] ?? []);
+          _currentPage = data['page'] as int? ?? 1;
+          _totalPages = data['pages'] as int? ?? 0;
+          _loading = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _loading = false);
     }
   }
 
