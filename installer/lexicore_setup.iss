@@ -9,7 +9,7 @@
 #define MyAppVersion "5.5"
 #define MyAppPublisher "Pham Anh"
 #define MyAppURL "https://github.com/yuki-20/Lexi-Core"
-#define MyAppExeName "LexiCore.bat"
+#define MyAppExeName "LexiCore.vbs"
 #define MyRepoZip "https://github.com/yuki-20/Lexi-Core/archive/refs/heads/main.zip"
 
 [Setup]
@@ -45,16 +45,17 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"
 
 [Files]
-; Only bundle the launcher bat — everything else is downloaded
+; Launcher scripts — everything else is downloaded from GitHub
+Source: "LexiCore.vbs"; DestDir: "{app}"; Flags: ignoreversion
 Source: "LexiCore.bat"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
-Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"
+Name: "{group}\{#MyAppName}"; Filename: "wscript.exe"; Parameters: """{app}\LexiCore.vbs"""; WorkingDir: "{app}"; IconFilename: "{app}\ui\lexicore_ui.exe"; Comment: "Launch LexiCore"
 Name: "{group}\Uninstall {#MyAppName}"; Filename: "{uninstallexe}"
-Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; Tasks: desktopicon
+Name: "{autodesktop}\{#MyAppName}"; Filename: "wscript.exe"; Parameters: """{app}\LexiCore.vbs"""; WorkingDir: "{app}"; IconFilename: "{app}\ui\lexicore_ui.exe"; Tasks: desktopicon; Comment: "Launch LexiCore"
 
 [Run]
-Filename: "{app}\{#MyAppExeName}"; Description: "Launch {#MyAppName}"; Flags: nowait postinstall skipifsilent shellexec; WorkingDir: "{app}"
+Filename: "wscript.exe"; Parameters: """{app}\LexiCore.vbs"""; Description: "Launch {#MyAppName}"; Flags: nowait postinstall skipifsilent; WorkingDir: "{app}"
 
 [UninstallDelete]
 Type: filesandordirs; Name: "{app}"

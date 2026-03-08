@@ -18,7 +18,7 @@ venv/
 .env.local
 engine/ai_config.json
 
-# Runtime data (generated)
+# Runtime data (generated / user-specific)
 data/index.data
 data/meaning.bin
 data/user_progress.db
@@ -26,6 +26,8 @@ data/media_cache/
 data/*.db
 data/*.db-shm
 data/*.db-wal
+data/*.apkg
+data/avatars/
 
 # Build artifacts
 dist/
