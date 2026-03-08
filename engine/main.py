@@ -21,7 +21,7 @@ from pydantic import BaseModel
 
 from engine.config import (
     API_HOST, API_PORT, DATA_DIR, INDEX_PATH, MEANING_PATH,
-    AUTOCOMPLETE_LIMIT, FUZZY_THRESHOLD,
+    AUTOCOMPLETE_LIMIT, FUZZY_THRESHOLD, ROOT_DIR,
 )
 from engine.data.index_store import IndexStore
 from engine.data.meaning_store import MeaningStore
@@ -62,10 +62,17 @@ class LexiCoreEngine:
     def load(self) -> None:
         """Load index.data into Trie + Bloom, build inverted index."""
         if not INDEX_PATH.exists() or not MEANING_PATH.exists():
-            print("[!] No dictionary data found. Run the builder first:")
-            print("    python -m engine.data.builder <dictionary.json>")
-            self._ready = False
-            return
+            # Auto-build from sample dictionary on first run
+            sample = ROOT_DIR / "scripts" / "sample_dictionary.json"
+            if sample.exists():
+                print("[*] First launch — building dictionary from sample_dictionary.json ...")
+                from engine.data.builder import build
+                build(str(sample))
+            else:
+                print("[!] No dictionary data found and no sample_dictionary.json available.")
+                print("    Run: python -m engine.data.builder <dictionary.json>")
+                self._ready = False
+                return
 
         t0 = time.perf_counter()
         words: list[str] = []
