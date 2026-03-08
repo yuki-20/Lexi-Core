@@ -130,6 +130,16 @@ class LiquidGlassTheme {
       labelSmall: mono,
     ),
     fontFamily: GoogleFonts.inter().fontFamily,
+    scrollbarTheme: ScrollbarThemeData(
+      thumbColor: WidgetStateProperty.all(glassBorder),
+      trackColor: WidgetStateProperty.all(Colors.transparent),
+      thickness: WidgetStateProperty.all(5),
+      radius: const Radius.circular(10),
+      crossAxisMargin: 2,
+      mainAxisMargin: 4,
+      thumbVisibility: WidgetStateProperty.all(false),
+      interactive: true,
+    ),
   );
 
   // ── Helpers ──────────────────────────────────────────────────────

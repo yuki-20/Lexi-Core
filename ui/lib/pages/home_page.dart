@@ -179,6 +179,29 @@ class _HomePageState extends State<HomePage> {
               ),
             ),
 
+          // ── Return Button ──
+          if (hasResult)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 16),
+              child: GestureDetector(
+                onTap: () => setState(() {
+                  _result = null;
+                  _isSaved = false;
+                }),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.arrow_back_rounded, size: 16, color: LiquidGlassTheme.accentPrimary),
+                    const SizedBox(width: 6),
+                    Text('Back to home', style: LiquidGlassTheme.bodySmall.copyWith(
+                      color: LiquidGlassTheme.accentPrimary,
+                      fontWeight: FontWeight.w600,
+                    )),
+                  ],
+                ),
+              ).animate().fadeIn(duration: 300.ms),
+            ),
+
           // ── Definition Card ──
           if (hasResult)
             ConstrainedBox(
@@ -224,69 +247,69 @@ class _HomePageState extends State<HomePage> {
           if (!hasResult && _wotd != null && _wotd!['word'] != null)
             ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 700),
-              child: GlassPanel(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        const Text('✨', style: TextStyle(fontSize: 18)),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text('Word of the Day',
-                            style: LiquidGlassTheme.label.copyWith(
-                              color: LiquidGlassTheme.accentPrimary,
-                              letterSpacing: 1.0,
-                            ),
-                          ),
-                        ),
-                        // Refresh button
-                        GestureDetector(
-                          onTap: _wotdRefreshing ? null : _refreshWotd,
-                          child: AnimatedRotation(
-                            turns: _wotdRefreshing ? 1 : 0,
-                            duration: const Duration(milliseconds: 500),
-                            child: Icon(
-                              Icons.refresh_rounded,
-                              size: 18,
-                              color: _wotdRefreshing
-                                  ? LiquidGlassTheme.textMuted
-                                  : LiquidGlassTheme.accentPrimary.withValues(alpha: 0.7),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    if (_wotd!['source'] != null)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 4),
-                        child: Row(
-                          children: [
-                            Icon(
-                              _wotd!['source'] == 'online' ? Icons.cloud_outlined : Icons.storage_outlined,
-                              size: 11,
-                              color: LiquidGlassTheme.textMuted,
-                            ),
-                            const SizedBox(width: 4),
-                            Text(
-                              'Rotates every ${_wotd!['rotation_hours'] ?? 2}h',
-                              style: LiquidGlassTheme.bodySmall.copyWith(
-                                fontSize: 10,
-                                color: LiquidGlassTheme.textMuted,
+              child: GestureDetector(
+                onTap: () {
+                  final word = _wotd!['word']?.toString();
+                  if (word != null && word.isNotEmpty) _onSearch(word);
+                },
+                child: GlassPanel(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Text('✨', style: TextStyle(fontSize: 18)),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text('Word of the Day',
+                              style: LiquidGlassTheme.label.copyWith(
+                                color: LiquidGlassTheme.accentPrimary,
+                                letterSpacing: 1.0,
                               ),
                             ),
-                          ],
-                        ),
+                          ),
+                          GestureDetector(
+                            onTap: _wotdRefreshing ? null : () {
+                              // Stop propagation to parent
+                              _refreshWotd();
+                            },
+                            child: AnimatedRotation(
+                              turns: _wotdRefreshing ? 1 : 0,
+                              duration: const Duration(milliseconds: 500),
+                              child: Icon(
+                                Icons.refresh_rounded,
+                                size: 18,
+                                color: _wotdRefreshing
+                                    ? LiquidGlassTheme.textMuted
+                                    : LiquidGlassTheme.accentPrimary.withValues(alpha: 0.7),
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
-                    const SizedBox(height: 14),
-                    GestureDetector(
-                      onTap: () {
-                        final word = _wotd!['word']?.toString();
-                        if (word != null && word.isNotEmpty) {
-                          _onSearch(word);
-                        }
-                      },
-                      child: Text(
+                      if (_wotd!['source'] != null)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 4),
+                          child: Row(
+                            children: [
+                              Icon(
+                                _wotd!['source'] == 'online' ? Icons.cloud_outlined : Icons.storage_outlined,
+                                size: 11,
+                                color: LiquidGlassTheme.textMuted,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                'Rotates every ${_wotd!['rotation_hours'] ?? 2}h',
+                                style: LiquidGlassTheme.bodySmall.copyWith(
+                                  fontSize: 10,
+                                  color: LiquidGlassTheme.textMuted,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      const SizedBox(height: 14),
+                      Text(
                         _wotd!['word']?.toString() ?? '',
                         style: LiquidGlassTheme.headingSm.copyWith(
                           decoration: TextDecoration.underline,
@@ -294,35 +317,35 @@ class _HomePageState extends State<HomePage> {
                           decorationStyle: TextDecorationStyle.dotted,
                         ),
                       ),
-                    ),
-                    const SizedBox(height: 8),
-                    Builder(builder: (_) {
-                      final def = _wotd!['definition'];
-                      String text = '';
-                      if (def is Map) {
-                        final defs = def['definitions'] as List?;
-                        text = (defs != null && defs.isNotEmpty)
-                            ? defs.first.toString() : '';
-                      } else if (def != null) {
-                        text = def.toString();
-                      }
-                      if (text.isEmpty) return const SizedBox.shrink();
-                      return Text(
-                        text,
-                        style: LiquidGlassTheme.body,
-                        maxLines: 3,
-                        overflow: TextOverflow.ellipsis,
-                      );
-                    }),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Tap the word to explore its full definition →',
-                      style: LiquidGlassTheme.bodySmall.copyWith(
-                        color: LiquidGlassTheme.textMuted,
-                        fontSize: 11,
+                      const SizedBox(height: 8),
+                      Builder(builder: (_) {
+                        final def = _wotd!['definition'];
+                        String text = '';
+                        if (def is Map) {
+                          final defs = def['definitions'] as List?;
+                          text = (defs != null && defs.isNotEmpty)
+                              ? defs.first.toString() : '';
+                        } else if (def != null) {
+                          text = def.toString();
+                        }
+                        if (text.isEmpty) return const SizedBox.shrink();
+                        return Text(
+                          text,
+                          style: LiquidGlassTheme.body,
+                          maxLines: 3,
+                          overflow: TextOverflow.ellipsis,
+                        );
+                      }),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Tap anywhere to explore full definition →',
+                        style: LiquidGlassTheme.bodySmall.copyWith(
+                          color: LiquidGlassTheme.textMuted,
+                          fontSize: 11,
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ).animate().fadeIn(delay: 400.ms, duration: 500.ms)
                .slideY(begin: 0.06, end: 0),

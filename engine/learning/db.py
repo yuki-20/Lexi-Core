@@ -148,6 +148,17 @@ CREATE TABLE IF NOT EXISTS quest_progress (
     PRIMARY KEY (quest_id, period)
 );
 
+-- ── v5.3 — AI Conversations ─────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS ai_conversations (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    title       TEXT    NOT NULL DEFAULT 'New Chat',
+    model       TEXT    NOT NULL DEFAULT 'DeepSeek-R1',
+    messages    TEXT    NOT NULL DEFAULT '[]',         -- JSON array
+    created_at  TEXT    NOT NULL DEFAULT (datetime('now')),
+    updated_at  TEXT    NOT NULL DEFAULT (datetime('now'))
+);
+
 -- ── Indexes ──────────────────────────────────────────────────────
 
 CREATE INDEX IF NOT EXISTS idx_search_word ON search_history(word);
@@ -155,6 +166,7 @@ CREATE INDEX IF NOT EXISTS idx_review_next ON review_schedule(next_review);
 CREATE INDEX IF NOT EXISTS idx_cards_deck ON flashcard_cards(deck_id);
 CREATE INDEX IF NOT EXISTS idx_quiz_deck ON quiz_results(deck_id);
 CREATE INDEX IF NOT EXISTS idx_answers_quiz ON quiz_answers(quiz_id);
+CREATE INDEX IF NOT EXISTS idx_ai_conv_date ON ai_conversations(updated_at DESC);
 """
 
 
@@ -392,6 +404,35 @@ class UserDB:
     def delete_card(self, card_id: int) -> bool:
         with self._cursor() as cur:
             cur.execute("DELETE FROM flashcard_cards WHERE id = ?", (card_id,))
+            return cur.rowcount > 0
+
+    def update_card(self, card_id: int, word: str | None = None,
+                    definition: str | None = None) -> bool:
+        """Update a flashcard's word and/or definition."""
+        updates, params = [], []
+        if word is not None:
+            updates.append("word = ?")
+            params.append(word)
+        if definition is not None:
+            updates.append("definition = ?")
+            params.append(definition)
+        if not updates:
+            return False
+        params.append(card_id)
+        with self._cursor() as cur:
+            cur.execute(
+                f"UPDATE flashcard_cards SET {', '.join(updates)} WHERE id = ?",
+                params,
+            )
+            return cur.rowcount > 0
+
+    def rename_deck(self, deck_id: int, name: str) -> bool:
+        """Rename a flashcard deck."""
+        with self._cursor() as cur:
+            cur.execute(
+                "UPDATE flashcard_decks SET name = ? WHERE id = ?",
+                (name, deck_id),
+            )
             return cur.rowcount > 0
 
     # ══════════════════════════════════════════════════════════════════
@@ -790,3 +831,49 @@ class UserDB:
                     )
                     newly_completed.append({"id": qid, **info})
         return newly_completed
+
+    # ══════════════════════════════════════════════════════════════════
+    # v5.3 — AI CONVERSATIONS
+    # ══════════════════════════════════════════════════════════════════
+
+    def save_ai_conversation(self, conv_id: int | None, title: str, model: str, messages: list) -> int:
+        """Create or update an AI conversation. Returns conversation ID."""
+        msgs_json = json.dumps(messages, ensure_ascii=False)
+        with self._cursor() as cur:
+            if conv_id:
+                cur.execute(
+                    "UPDATE ai_conversations SET title = ?, model = ?, messages = ?, updated_at = datetime('now') WHERE id = ?",
+                    (title, model, msgs_json, conv_id)
+                )
+                return conv_id
+            else:
+                cur.execute(
+                    "INSERT INTO ai_conversations (title, model, messages) VALUES (?, ?, ?)",
+                    (title, model, msgs_json)
+                )
+                return cur.lastrowid  # type: ignore
+
+    def get_ai_conversations(self, limit: int = 50) -> list[dict[str, Any]]:
+        """List all conversations (without full messages)."""
+        with self._cursor() as cur:
+            cur.execute(
+                "SELECT id, title, model, created_at, updated_at FROM ai_conversations ORDER BY updated_at DESC LIMIT ?",
+                (limit,)
+            )
+            return [dict(row) for row in cur.fetchall()]
+
+    def get_ai_conversation(self, conv_id: int) -> dict[str, Any] | None:
+        """Get a single conversation with messages."""
+        with self._cursor() as cur:
+            cur.execute("SELECT * FROM ai_conversations WHERE id = ?", (conv_id,))
+            row = cur.fetchone()
+            if row:
+                d = dict(row)
+                d["messages"] = json.loads(d.get("messages", "[]"))
+                return d
+            return None
+
+    def delete_ai_conversation(self, conv_id: int) -> bool:
+        with self._cursor() as cur:
+            cur.execute("DELETE FROM ai_conversations WHERE id = ?", (conv_id,))
+            return cur.rowcount > 0

@@ -192,8 +192,27 @@ class _PerformancePageState extends State<PerformancePage> {
 
           // ── Daily & Weekly Quests ──
           if (_quests.isNotEmpty) ...[
-            Text('🎯 Quests', style: LiquidGlassTheme.label)
-                .animate().fadeIn(delay: 250.ms),
+            Row(
+              children: [
+                Text('🎯 Quests', style: LiquidGlassTheme.label),
+                const Spacer(),
+                // Quest reset timer
+                Builder(builder: (_) {
+                  final now = DateTime.now();
+                  final midnight = DateTime(now.year, now.month, now.day + 1);
+                  final diff = midnight.difference(now);
+                  final h = diff.inHours;
+                  final m = diff.inMinutes % 60;
+                  return Text(
+                    'Resets in ${h}h ${m}m',
+                    style: LiquidGlassTheme.bodySmall.copyWith(
+                      fontSize: 10,
+                      color: LiquidGlassTheme.accentPrimary.withValues(alpha: 0.7),
+                    ),
+                  );
+                }),
+              ],
+            ).animate().fadeIn(delay: 250.ms),
             const SizedBox(height: 12),
             ..._quests.asMap().entries.map((entry) {
               final i = entry.key;
@@ -485,9 +504,12 @@ class _PerformancePageState extends State<PerformancePage> {
                         color: unlocked ? null : Colors.white.withValues(alpha: 0.05),
                       ),
                       child: Center(
-                        child: Text(
-                          unlocked ? emoji : '🔒',
-                          style: TextStyle(fontSize: unlocked ? 26 : 20),
+                        child: Opacity(
+                          opacity: unlocked ? 1.0 : 0.35,
+                          child: Text(
+                            emoji,
+                            style: const TextStyle(fontSize: 26),
+                          ),
                         ),
                       ),
                     ),
@@ -506,25 +528,33 @@ class _PerformancePageState extends State<PerformancePage> {
                                   : LiquidGlassTheme.textMuted,
                             ),
                           ),
-                          const SizedBox(height: 2),
+                          const SizedBox(height: 4),
                           Text(
-                            pet['description']?.toString() ?? (unlocked ? 'Unlocked!' : 'Locked'),
+                            pet['description']?.toString().isNotEmpty == true
+                                ? pet['description'].toString()
+                                : (unlocked ? 'Your companion!' : 'Not yet unlocked'),
                             style: LiquidGlassTheme.bodySmall.copyWith(
-                              fontSize: 11,
-                              color: LiquidGlassTheme.textMuted,
+                              fontSize: 12,
+                              color: unlocked
+                                  ? LiquidGlassTheme.textSecondary
+                                  : LiquidGlassTheme.textMuted,
                             ),
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                           ),
-                          if (!unlocked && pet['requirement'] != null)
+                          if (pet['requirement'] != null)
                             Padding(
                               padding: const EdgeInsets.only(top: 4),
                               child: Text(
-                                '🔑 ${pet['requirement']}',
+                                unlocked
+                                    ? '✅ ${pet['requirement']}'
+                                    : '🔑 ${pet['requirement']}',
                                 style: TextStyle(
                                   fontSize: 10,
                                   fontWeight: FontWeight.w500,
-                                  color: Colors.amber.withValues(alpha: 0.7),
+                                  color: unlocked
+                                      ? Colors.greenAccent.withValues(alpha: 0.7)
+                                      : Colors.amber.withValues(alpha: 0.7),
                                 ),
                               ),
                             ),

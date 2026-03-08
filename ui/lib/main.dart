@@ -18,6 +18,7 @@ import 'pages/saved_words_page.dart';
 import 'pages/performance_page.dart';
 import 'pages/settings_page.dart';
 import 'pages/projects_page.dart';
+import 'pages/lexi_ai_page.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -141,6 +142,7 @@ class _LexiCoreShellState extends State<LexiCoreShell>
     _NavItem(Icons.quiz_rounded, 'Quiz'),
     _NavItem(Icons.bookmark_rounded, 'Saved Words'),
     _NavItem(Icons.analytics_rounded, 'Performance'),
+    _NavItem(Icons.smart_toy_rounded, 'Lexi AI'),
     _NavItem(Icons.settings_rounded, 'Settings'),
   ];
 
@@ -151,6 +153,7 @@ class _LexiCoreShellState extends State<LexiCoreShell>
     QuizPage(),
     SavedWordsPage(),
     PerformancePage(),
+    LexiAiPage(),
     SettingsPage(),
   ];
 
@@ -272,23 +275,39 @@ class _LexiCoreShellState extends State<LexiCoreShell>
               // ── Logo / Brand ──
               Padding(
                 padding: const EdgeInsets.fromLTRB(0, 20, 0, 16),
-                child: AnimatedCrossFade(
-                  firstChild: const Text('L', style: TextStyle(
-                    fontSize: 24, fontWeight: FontWeight.w800,
-                    color: LiquidGlassTheme.accentPrimary,
-                    letterSpacing: -1,
-                  )),
-                  secondChild: Text('LexiCore', style: TextStyle(
-                    fontSize: 18, fontWeight: FontWeight.w700,
-                    foreground: Paint()..shader = const LinearGradient(
-                      colors: [LiquidGlassTheme.accentPrimary, LiquidGlassTheme.accentSecondary],
-                    ).createShader(const Rect.fromLTWH(0, 0, 100, 20)),
-                    letterSpacing: -0.5,
-                  )),
-                  crossFadeState: _sidebarExpanded
-                      ? CrossFadeState.showSecond
-                      : CrossFadeState.showFirst,
-                  duration: const Duration(milliseconds: 200),
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final showText = constraints.maxWidth > 120;
+                    return showText
+                        ? Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(8),
+                                  child: Image.asset('assets/images/app_icon.png',
+                                    width: 28, height: 28, fit: BoxFit.contain),
+                                ),
+                                const SizedBox(width: 8),
+                                Flexible(
+                                  child: Text('LexiCore', style: TextStyle(
+                                    fontSize: 17, fontWeight: FontWeight.w700,
+                                    foreground: Paint()..shader = const LinearGradient(
+                                      colors: [LiquidGlassTheme.accentPrimary, LiquidGlassTheme.accentSecondary],
+                                    ).createShader(const Rect.fromLTWH(0, 0, 100, 20)),
+                                    letterSpacing: -0.5,
+                                  ), overflow: TextOverflow.ellipsis),
+                                ),
+                              ],
+                            ),
+                          )
+                        : ClipRRect(
+                            borderRadius: BorderRadius.circular(8),
+                            child: Image.asset('assets/images/app_icon.png',
+                              width: 32, height: 32, fit: BoxFit.contain),
+                          );
+                  },
                 ),
               ),
 
@@ -424,9 +443,12 @@ class _LexiCoreShellState extends State<LexiCoreShell>
                         color: isActive ? LiquidGlassTheme.accentPrimary : Colors.transparent,
                       ),
                     ),
-                    Icon(item.icon, size: 20,
-                      color: isActive ? LiquidGlassTheme.accentPrimary : LiquidGlassTheme.textMuted,
-                    ),
+                    index == 6
+                        ? Image.asset('assets/images/lexi_ai_icon.gif',
+                            width: 20, height: 20)
+                        : Icon(item.icon, size: 20,
+                            color: isActive ? LiquidGlassTheme.accentPrimary : LiquidGlassTheme.textMuted,
+                          ),
                     const SizedBox(width: 12),
                     Expanded(
                       child: Text(
@@ -446,9 +468,12 @@ class _LexiCoreShellState extends State<LexiCoreShell>
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(item.icon, size: 20,
-                        color: isActive ? LiquidGlassTheme.accentPrimary : LiquidGlassTheme.textMuted,
-                      ),
+                      index == 6
+                          ? Image.asset('assets/images/lexi_ai_icon.gif',
+                              width: 20, height: 20)
+                          : Icon(item.icon, size: 20,
+                              color: isActive ? LiquidGlassTheme.accentPrimary : LiquidGlassTheme.textMuted,
+                            ),
                       if (isActive)
                         Container(
                           margin: const EdgeInsets.only(top: 4),

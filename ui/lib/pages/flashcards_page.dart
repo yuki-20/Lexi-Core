@@ -1,5 +1,5 @@
-/// LexiCore — Flashcards Page (v3.1)
-/// Deck management, 3D flip study mode, improved spacing + animations.
+/// LexiCore — Flashcards Page (v5.4)
+/// Deck management, editing, 3D flip study mode, improved spacing + animations.
 library;
 
 import 'dart:math' as math;
@@ -26,6 +26,12 @@ class _FlashcardsPageState extends State<FlashcardsPage> {
   List<Map<String, dynamic>> _cards = [];
   int _cardIndex = 0;
   bool _showingFront = true;
+
+  // Edit mode
+  bool _editing = false;
+  int _editDeckId = 0;
+  String _editDeckName = '';
+  List<Map<String, dynamic>> _editCards = [];
 
   @override
   void initState() {
@@ -117,8 +123,172 @@ class _FlashcardsPageState extends State<FlashcardsPage> {
     }
   }
 
+  // ── Deck Editing ────────────────────────────────────────────────
+  Future<void> _editDeck(Map<String, dynamic> deck) async {
+    final deckId = deck['id'] as int;
+    final cards = await _engine.getCards(deckId);
+    setState(() {
+      _editing = true;
+      _editDeckId = deckId;
+      _editDeckName = deck['name'] ?? 'Untitled';
+      _editCards = cards;
+    });
+  }
+
+  Future<void> _renameDeckDialog() async {
+    final controller = TextEditingController(text: _editDeckName);
+    final newName = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: LiquidGlassTheme.bgDeep,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text('Rename Deck', style: LiquidGlassTheme.headingSm),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          style: LiquidGlassTheme.body.copyWith(color: LiquidGlassTheme.textPrimary),
+          decoration: InputDecoration(
+            hintText: 'Deck name',
+            hintStyle: LiquidGlassTheme.body,
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, controller.text),
+            child: const Text('Rename'),
+          ),
+        ],
+      ),
+    );
+    if (newName != null && newName.isNotEmpty && newName != _editDeckName) {
+      await _engine.renameDeck(_editDeckId, newName);
+      setState(() => _editDeckName = newName);
+      _loadDecks();
+    }
+  }
+
+  Future<void> _addCardToDeck() async {
+    final wordCtrl = TextEditingController();
+    final defCtrl = TextEditingController();
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: LiquidGlassTheme.bgDeep,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text('Add Card', style: LiquidGlassTheme.headingSm),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: wordCtrl,
+              autofocus: true,
+              style: LiquidGlassTheme.body.copyWith(color: LiquidGlassTheme.textPrimary),
+              decoration: InputDecoration(
+                hintText: 'Word',
+                hintStyle: LiquidGlassTheme.body,
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: defCtrl,
+              style: LiquidGlassTheme.body.copyWith(color: LiquidGlassTheme.textPrimary),
+              maxLines: 3,
+              decoration: InputDecoration(
+                hintText: 'Definition (optional)',
+                hintStyle: LiquidGlassTheme.body,
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Add'),
+          ),
+        ],
+      ),
+    );
+    if (result == true && wordCtrl.text.isNotEmpty) {
+      await _engine.addCard(
+        _editDeckId, wordCtrl.text,
+        definition: defCtrl.text.isNotEmpty ? defCtrl.text : null,
+      );
+      final cards = await _engine.getCards(_editDeckId);
+      setState(() => _editCards = cards);
+      _loadDecks();
+    }
+  }
+
+  Future<void> _editCardDialog(Map<String, dynamic> card) async {
+    final wordCtrl = TextEditingController(text: card['word'] ?? '');
+    final defCtrl = TextEditingController(text: card['definition'] ?? '');
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: LiquidGlassTheme.bgDeep,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text('Edit Card', style: LiquidGlassTheme.headingSm),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: wordCtrl,
+              autofocus: true,
+              style: LiquidGlassTheme.body.copyWith(color: LiquidGlassTheme.textPrimary),
+              decoration: InputDecoration(
+                labelText: 'Word',
+                labelStyle: LiquidGlassTheme.bodySmall,
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: defCtrl,
+              style: LiquidGlassTheme.body.copyWith(color: LiquidGlassTheme.textPrimary),
+              maxLines: 3,
+              decoration: InputDecoration(
+                labelText: 'Definition',
+                labelStyle: LiquidGlassTheme.bodySmall,
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    if (result == true) {
+      await _engine.updateCard(
+        _editDeckId, card['id'] as int,
+        word: wordCtrl.text,
+        definition: defCtrl.text,
+      );
+      final cards = await _engine.getCards(_editDeckId);
+      setState(() => _editCards = cards);
+    }
+  }
+
+  Future<void> _deleteCardFromDeck(int cardId) async {
+    await _engine.deleteCard(cardId);
+    final cards = await _engine.getCards(_editDeckId);
+    setState(() => _editCards = cards);
+    _loadDecks();
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (_editing) return _buildDeckEditor();
     if (_studying) return _buildStudyMode();
     return _buildDeckList();
   }
@@ -209,6 +379,12 @@ class _FlashcardsPageState extends State<FlashcardsPage> {
                           ],
                         ),
                       ),
+                      // Edit button
+                      IconButton(
+                        icon: const Icon(Icons.edit_rounded, size: 18, color: LiquidGlassTheme.accentPrimary),
+                        tooltip: 'Edit deck',
+                        onPressed: () => _editDeck(deck),
+                      ),
                       GlassPanel(
                         borderRadius: 12,
                         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
@@ -229,6 +405,165 @@ class _FlashcardsPageState extends State<FlashcardsPage> {
                 ).animate()
                  .fadeIn(delay: Duration(milliseconds: 150 * entry.key), duration: 400.ms)
                  .slideY(begin: 0.05, end: 0),
+              );
+            }),
+        ],
+      ),
+    );
+  }
+
+  // ── Deck Editor ─────────────────────────────────────────────────
+  Widget _buildDeckEditor() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(24, 20, 24, 120),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header
+          Row(
+            children: [
+              GlassPanel(
+                borderRadius: 12,
+                padding: const EdgeInsets.all(8),
+                child: GestureDetector(
+                  onTap: () => setState(() {
+                    _editing = false;
+                    _editCards = [];
+                  }),
+                  child: const Icon(Icons.arrow_back, size: 20, color: LiquidGlassTheme.textSecondary),
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: GestureDetector(
+                  onTap: _renameDeckDialog,
+                  child: Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          _editDeckName,
+                          style: LiquidGlassTheme.heading.copyWith(fontSize: 22),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      const Icon(Icons.edit_rounded, size: 16, color: LiquidGlassTheme.textMuted),
+                    ],
+                  ),
+                ),
+              ),
+              GlassPanel(
+                borderRadius: 30,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: GestureDetector(
+                  onTap: _addCardToDeck,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.add_rounded, size: 18, color: LiquidGlassTheme.accentPrimary),
+                      const SizedBox(width: 6),
+                      Text('Add Card', style: LiquidGlassTheme.label.copyWith(
+                        color: LiquidGlassTheme.accentPrimary,
+                      )),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ).animate().fadeIn(duration: 400.ms),
+
+          const SizedBox(height: 8),
+          Text(
+            '${_editCards.length} cards',
+            style: LiquidGlassTheme.bodySmall,
+          ),
+          const SizedBox(height: 20),
+
+          if (_editCards.isEmpty)
+            Center(
+              child: Padding(
+                padding: const EdgeInsets.only(top: 60),
+                child: Column(
+                  children: [
+                    const Icon(Icons.note_add_outlined, size: 48, color: LiquidGlassTheme.textMuted),
+                    const SizedBox(height: 16),
+                    Text('No cards yet', style: LiquidGlassTheme.headingSm),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Tap "Add Card" to add words\nto this deck',
+                      style: LiquidGlassTheme.bodySmall,
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                ),
+              ).animate().fadeIn(delay: 200.ms),
+            )
+          else
+            ..._editCards.asMap().entries.map((entry) {
+              final card = entry.value;
+              final cardId = card['id'] as int;
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: GlassPanel(
+                  padding: const EdgeInsets.fromLTRB(20, 14, 8, 14),
+                  child: Row(
+                    children: [
+                      // Card number
+                      Container(
+                        width: 32, height: 32,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: LiquidGlassTheme.accentPrimary.withValues(alpha: 0.15),
+                        ),
+                        child: Center(
+                          child: Text(
+                            '${entry.key + 1}',
+                            style: LiquidGlassTheme.label.copyWith(
+                              color: LiquidGlassTheme.accentPrimary, fontSize: 12,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 14),
+                      // Word + definition
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              card['word'] ?? '',
+                              style: LiquidGlassTheme.headingSm.copyWith(fontSize: 15),
+                            ),
+                            if (card['definition'] != null && card['definition'].toString().isNotEmpty)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 4),
+                                child: Text(
+                                  card['definition'].toString(),
+                                  style: LiquidGlassTheme.bodySmall.copyWith(fontSize: 12),
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                      // Edit button
+                      IconButton(
+                        icon: const Icon(Icons.edit_rounded, size: 16, color: LiquidGlassTheme.accentPrimary),
+                        tooltip: 'Edit',
+                        onPressed: () => _editCardDialog(card),
+                      ),
+                      // Delete button
+                      IconButton(
+                        icon: const Icon(Icons.close_rounded, size: 16, color: LiquidGlassTheme.textMuted),
+                        tooltip: 'Remove',
+                        onPressed: () => _deleteCardFromDeck(cardId),
+                      ),
+                    ],
+                  ),
+                ).animate()
+                 .fadeIn(delay: Duration(milliseconds: 60 * entry.key), duration: 300.ms)
+                 .slideX(begin: 0.03, end: 0),
               );
             }),
         ],

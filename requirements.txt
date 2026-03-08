@@ -1,4 +1,4 @@
-# LexiCore Engine v2.0 — Python Dependencies
+# LexiCore Engine v5.4 — Python Dependencies
 fastapi>=0.115.0
 uvicorn[standard]>=0.32.0
 websockets>=13.0
@@ -6,10 +6,12 @@ metaphone>=0.6
 python-Levenshtein>=0.25.0
 gtts>=2.5.0
 aiohttp>=3.10.0
+httpx>=0.27.0
 Pillow>=10.4.0
 pytesseract>=0.3.13
 vosk>=0.3.45
 PyAudio>=0.2.14
+cryptography>=43.0
 
 # Dev
 pytest>=8.0

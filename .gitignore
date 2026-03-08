@@ -13,15 +13,19 @@ __pycache__/
 .venv/
 venv/
 
-# Environment
+# Environment & Secrets
 .env
 .env.local
+engine/ai_config.json
 
 # Runtime data (generated)
 data/index.data
 data/meaning.bin
 data/user_progress.db
 data/media_cache/
+data/*.db
+data/*.db-shm
+data/*.db-wal
 
 # Build artifacts
 dist/
@@ -29,8 +33,7 @@ target/
 *.egg-info/
 build/
 
-# Tauri
-ui/src-tauri/target/
-
-data/*.db-shm
-data/*.db-wal
+# Flutter
+ui/build/
+ui/.dart_tool/
+ui/.flutter-plugins-dependencies

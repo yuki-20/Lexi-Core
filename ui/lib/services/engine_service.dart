@@ -239,6 +239,46 @@ class EngineService {
     }
   }
 
+  Future<bool> renameDeck(int deckId, String name) async {
+    try {
+      final resp = await http.put(
+        Uri.parse('$_baseUrl/api/decks/$deckId'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'name': name}),
+      ).timeout(const Duration(seconds: 3));
+      return resp.statusCode == 200;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<bool> updateCard(int deckId, int cardId, {String? word, String? definition}) async {
+    try {
+      final resp = await http.put(
+        Uri.parse('$_baseUrl/api/decks/$deckId/cards/$cardId'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          if (word != null) 'word': word,
+          if (definition != null) 'definition': definition,
+        }),
+      ).timeout(const Duration(seconds: 3));
+      return resp.statusCode == 200;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<bool> deleteCard(int cardId) async {
+    try {
+      final resp = await http.delete(
+        Uri.parse('$_baseUrl/api/cards/$cardId'),
+      ).timeout(const Duration(seconds: 3));
+      return resp.statusCode == 200;
+    } catch (_) {
+      return false;
+    }
+  }
+
   Future<Map<String, dynamic>?> createDeckFromWords(
     String name, List<String> words, {int? count}
   ) async {
@@ -618,6 +658,122 @@ class EngineService {
       return jsonDecode(resp.body);
     } catch (_) {
       return null;
+    }
+  }
+  // ── v5.3 — Lexi-AI ────────────────────────────────────────────────
+
+  Future<Map<String, dynamic>> sendAiChat(
+    List<Map<String, String>> messages, {
+    String model = 'DeepSeek-R1',
+    int? conversationId,
+  }) async {
+    try {
+      final resp = await http.post(
+        Uri.parse('$_baseUrl/api/ai/chat'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'messages': messages,
+          'model': model,
+          'conversation_id': conversationId,
+        }),
+      ).timeout(const Duration(seconds: 60));
+      return Map<String, dynamic>.from(jsonDecode(resp.body));
+    } catch (e) {
+      return {'error': e.toString()};
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> getAiHistory() async {
+    try {
+      final resp = await http.get(Uri.parse('$_baseUrl/api/ai/history'))
+          .timeout(const Duration(seconds: 5));
+      final data = jsonDecode(resp.body);
+      return List<Map<String, dynamic>>.from(data['conversations'] ?? []);
+    } catch (_) {
+      return [];
+    }
+  }
+
+  Future<Map<String, dynamic>?> getAiConversation(int convId) async {
+    try {
+      final resp = await http.get(Uri.parse('$_baseUrl/api/ai/history/$convId'))
+          .timeout(const Duration(seconds: 5));
+      final data = jsonDecode(resp.body);
+      return Map<String, dynamic>.from(data['conversation'] ?? {});
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<int?> saveAiConversation({
+    int? conversationId,
+    required String title,
+    required String model,
+    required List<Map<String, String>> messages,
+  }) async {
+    try {
+      final resp = await http.post(
+        Uri.parse('$_baseUrl/api/ai/history'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'conversation_id': conversationId,
+          'title': title,
+          'model': model,
+          'messages': messages,
+        }),
+      ).timeout(const Duration(seconds: 5));
+      final data = jsonDecode(resp.body);
+      return data['conversation_id'] as int?;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> deleteAiConversation(int convId) async {
+    try {
+      await http.delete(Uri.parse('$_baseUrl/api/ai/history/$convId'))
+          .timeout(const Duration(seconds: 3));
+    } catch (_) {}
+  }
+
+  /// Stream AI chat via SSE — yields events {type, content} in real-time.
+  Stream<Map<String, dynamic>> streamAiChat(
+    List<Map<String, String>> messages, {
+    String model = 'DeepSeek-R1',
+    bool webSearch = false,
+    List<String>? images,
+  }) async* {
+    final client = http.Client();
+    try {
+      final request = http.Request(
+        'POST',
+        Uri.parse('$_baseUrl/api/ai/chat/stream'),
+      );
+      request.headers['Content-Type'] = 'application/json';
+      request.body = jsonEncode({
+        'messages': messages,
+        'model': model,
+        'web_search': webSearch,
+        if (images != null && images.isNotEmpty) 'images': images,
+      });
+
+      final response = await client.send(request).timeout(const Duration(seconds: 120));
+      final stream = response.stream.transform(utf8.decoder).transform(const LineSplitter());
+
+      await for (final line in stream) {
+        if (!line.startsWith('data: ')) continue;
+        final payload = line.substring(6).trim();
+        if (payload.isEmpty) continue;
+        try {
+          final event = Map<String, dynamic>.from(jsonDecode(payload));
+          yield event;
+          if (event['type'] == 'done' || event['type'] == 'error') break;
+        } catch (_) {}
+      }
+    } catch (e) {
+      yield {'type': 'error', 'content': e.toString()};
+    } finally {
+      client.close();
     }
   }
 

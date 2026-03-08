@@ -82,19 +82,23 @@ class _QuizPageState extends State<QuizPage> {
 
   Future<void> _finishQuiz() async {
     _timer.stop();
-    await _engine.submitQuiz(
-      answers: _answers,
-      durationS: _timer.elapsedMilliseconds / 1000,
-    );
-    final newPets = await _engine.checkPetUnlocks();
+    // Show result immediately — don't block on API
     setState(() {
       _state = 'result';
     });
-    if (newPets.isNotEmpty && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('🎉 New pet unlocked: ${newPets.join(', ')}!')),
+    // Background: submit + check unlocks
+    try {
+      await _engine.submitQuiz(
+        answers: _answers,
+        durationS: _timer.elapsedMilliseconds / 1000,
       );
-    }
+      final newPets = await _engine.checkPetUnlocks();
+      if (newPets.isNotEmpty && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('🎉 New pet unlocked: ${newPets.join(', ')}!')),
+        );
+      }
+    } catch (_) {}
   }
 
   @override
