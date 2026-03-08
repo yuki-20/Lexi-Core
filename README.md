@@ -311,15 +311,6 @@ All endpoints are available at `http://localhost:8741`.
 
 ---
 
-## 🔒 Security
-
-- **API key encryption**: The FPT AI Factory API key is encrypted using **Fernet** symmetric encryption with a **PBKDF2-SHA256** derived key (100,000 iterations).
-- **Admin-only decryption**: Requires the `LEXI_ADMIN_KEY` environment variable to decrypt.
-- **Encrypted storage**: The key is stored in `engine/ai_config.json` (gitignored).
-- **Key management**: Use `python -m engine.encrypt_key` to re-encrypt with a new admin password.
-
----
-
 ## 🗺️ Development Roadmap
 
 ### ✅ Completed (v1.0 → v5.4)
