@@ -286,11 +286,12 @@ end;
 procedure DoOnlineInstall();
 var
   ResultCode: Integer;
-  AppDir, TempZip, TempExtract, SourceDir: String;
+  AppDir, TempZip, TempExtract, SourceDir, TempUIZip: String;
   PSCommand: String;
 begin
   AppDir := ExpandConstant('{app}');
   TempZip := ExpandConstant('{tmp}\lexicore-main.zip');
+  TempUIZip := ExpandConstant('{tmp}\ui.zip');
   TempExtract := ExpandConstant('{tmp}\lexicore-extract');
 
   // Step 1: Clean old installation
@@ -299,54 +300,61 @@ begin
   TechLog('[STEP 1/6] Cleaning previous installation...');
   CleanOldInstall();
 
-  // Step 2: Download source from GitHub
+  // Step 2: Download source from GitHub using curl.exe
   ProgressPage.SetProgress(2, 10);
   ProgressPage.SetText('Downloading LexiCore from GitHub...', '{#MyRepoZip}');
   TechLog('[STEP 2/6] Downloading source from GitHub...');
   TechLog('  URL: {#MyRepoZip}');
-  TechLog('  Target: ' + TempZip);
+  TechLog('  Using: curl.exe (follows redirects)');
 
-  PSCommand := 'Invoke-WebRequest -Uri "{#MyRepoZip}" -OutFile "' + TempZip + '" -UseBasicParsing';
-  if not RunCmd('powershell.exe', '-NoProfile -ExecutionPolicy Bypass -Command "' + PSCommand + '"', '', ResultCode) then
+  if not RunCmd(ExpandConstant('{sys}\curl.exe'),
+    '-L -o "' + TempZip + '" "{#MyRepoZip}" --ssl-no-revoke -s',
+    '', ResultCode) then
   begin
-    MsgBox('Failed to download LexiCore from GitHub. Please check your internet connection.', mbError, MB_OK);
+    MsgBox('Failed to download LexiCore. Please check your internet connection.', mbError, MB_OK);
     Exit;
   end;
-  TechLog('  Download complete (exit code: ' + IntToStr(ResultCode) + ')');
+  
+  if ResultCode <> 0 then
+  begin
+    TechLog('  [ERROR] curl failed with code: ' + IntToStr(ResultCode));
+    MsgBox('Download failed (curl exit code: ' + IntToStr(ResultCode) + '). Check your internet connection.', mbError, MB_OK);
+    Exit;
+  end;
+  TechLog('  Download complete');
 
-  // Step 3: Extract ZIP
+  // Step 3: Extract source ZIP using tar.exe (built into Windows 10+)
   ProgressPage.SetProgress(4, 10);
   ProgressPage.SetText('Extracting source code...', '');
   TechLog('[STEP 3/6] Extracting archive...');
-  TechLog('  Source: ' + TempZip);
-  TechLog('  Target: ' + TempExtract);
 
-  PSCommand := 'Expand-Archive -Path "' + TempZip + '" -DestinationPath "' + TempExtract + '" -Force';
-  RunCmd('powershell.exe', '-NoProfile -ExecutionPolicy Bypass -Command "' + PSCommand + '"', '', ResultCode);
-  TechLog('  Extraction complete');
+  ForceDirectories(TempExtract);
+  RunCmd(ExpandConstant('{sys}\tar.exe'),
+    '-xf "' + TempZip + '" -C "' + TempExtract + '"',
+    '', ResultCode);
+  TechLog('  Extraction complete (exit code: ' + IntToStr(ResultCode) + ')');
 
   SourceDir := TempExtract + '\Lexi-Core-main';
 
-  // Step 4: Copy engine files
+  // Step 4: Copy engine + support files using xcopy (works everywhere)
   ProgressPage.SetProgress(5, 10);
   ProgressPage.SetText('Installing Python engine...', '');
   TechLog('[STEP 4/6] Copying engine files...');
-  TechLog('  From: ' + SourceDir + '\engine');
-  TechLog('  To:   ' + AppDir + '\engine');
 
-  PSCommand := 'Copy-Item -Path "' + SourceDir + '\engine" -Destination "' + AppDir + '\engine" -Recurse -Force; ' +
-               'Copy-Item -Path "' + SourceDir + '\scripts" -Destination "' + AppDir + '\scripts" -Recurse -Force -ErrorAction SilentlyContinue; ' +
-               'Copy-Item -Path "' + SourceDir + '\data" -Destination "' + AppDir + '\data" -Recurse -Force -ErrorAction SilentlyContinue; ' +
-               'Copy-Item -Path "' + SourceDir + '\requirements.txt" -Destination "' + AppDir + '\requirements.txt" -Force; ' +
-               'Copy-Item -Path "' + SourceDir + '\pyproject.toml" -Destination "' + AppDir + '\pyproject.toml" -Force -ErrorAction SilentlyContinue';
-  RunCmd('powershell.exe', '-NoProfile -ExecutionPolicy Bypass -Command "' + PSCommand + '"', '', ResultCode);
-  TechLog('  Engine files copied');
+  ForceDirectories(AppDir + '\engine');
+  RunCmd('cmd.exe', '/c xcopy "' + SourceDir + '\engine" "' + AppDir + '\engine" /E /I /Y /Q', '', ResultCode);
+  TechLog('  Engine copied (exit code: ' + IntToStr(ResultCode) + ')');
+
+  RunCmd('cmd.exe', '/c if exist "' + SourceDir + '\scripts" xcopy "' + SourceDir + '\scripts" "' + AppDir + '\scripts" /E /I /Y /Q', '', ResultCode);
+  RunCmd('cmd.exe', '/c if exist "' + SourceDir + '\data" xcopy "' + SourceDir + '\data" "' + AppDir + '\data" /E /I /Y /Q', '', ResultCode);
+  RunCmd('cmd.exe', '/c if exist "' + SourceDir + '\requirements.txt" copy /Y "' + SourceDir + '\requirements.txt" "' + AppDir + '\requirements.txt"', '', ResultCode);
+  RunCmd('cmd.exe', '/c if exist "' + SourceDir + '\pyproject.toml" copy /Y "' + SourceDir + '\pyproject.toml" "' + AppDir + '\pyproject.toml"', '', ResultCode);
+  TechLog('  All source files copied');
 
   // Step 5: Install Python dependencies
   ProgressPage.SetProgress(6, 10);
   ProgressPage.SetText('Installing Python dependencies (pip)...', 'This may take a few minutes...');
   TechLog('[STEP 5/6] Installing Python dependencies...');
-  TechLog('  Running: pip install -r requirements.txt');
 
   RunCmd('cmd.exe', '/c pip install -r "' + AppDir + '\requirements.txt" --quiet 2>&1', AppDir, ResultCode);
   if ResultCode = 0 then
@@ -354,64 +362,53 @@ begin
   else
     TechLog('  [WARNING] pip returned exit code: ' + IntToStr(ResultCode));
 
-  // Step 6: Download pre-built UI from GitHub Releases (always try this first)
+  // Step 6: Download pre-built UI using curl.exe
   ProgressPage.SetProgress(7, 10);
-  ProgressPage.SetText('Downloading LexiCore UI...', 'Downloading pre-built release from GitHub...');
-  TechLog('[STEP 6/6] Downloading pre-built UI from GitHub Releases...');
+  ProgressPage.SetText('Downloading LexiCore UI...', 'Downloading pre-built release...');
+  TechLog('[STEP 6/6] Downloading pre-built UI...');
   TechLog('  URL: https://github.com/yuki-20/Lexi-Core/releases/download/v5.5/LexiCore_UI.zip');
 
-  // Create ui directory
   ForceDirectories(AppDir + '\ui');
 
-  PSCommand := '[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; ' +
-    'Invoke-WebRequest -Uri "https://github.com/yuki-20/Lexi-Core/releases/download/v5.5/LexiCore_UI.zip" -OutFile "' + ExpandConstant('{tmp}') + '\ui.zip" -UseBasicParsing';
-  RunCmd('powershell.exe', '-NoProfile -ExecutionPolicy Bypass -Command "' + PSCommand + '"', '', ResultCode);
+  RunCmd(ExpandConstant('{sys}\curl.exe'),
+    '-L -o "' + TempUIZip + '" "https://github.com/yuki-20/Lexi-Core/releases/download/v5.5/LexiCore_UI.zip" --ssl-no-revoke -s',
+    '', ResultCode);
 
-  if (ResultCode = 0) and FileExists(ExpandConstant('{tmp}') + '\ui.zip') then
+  if (ResultCode = 0) and FileExists(TempUIZip) then
   begin
     ProgressPage.SetProgress(8, 10);
     ProgressPage.SetText('Extracting LexiCore UI...', '');
     TechLog('  Download complete. Extracting...');
 
-    PSCommand := 'Expand-Archive -Path "' + ExpandConstant('{tmp}') + '\ui.zip" -DestinationPath "' + AppDir + '\ui" -Force';
-    RunCmd('powershell.exe', '-NoProfile -ExecutionPolicy Bypass -Command "' + PSCommand + '"', '', ResultCode);
-    TechLog('  UI extracted to ' + AppDir + '\ui');
+    RunCmd(ExpandConstant('{sys}\tar.exe'),
+      '-xf "' + TempUIZip + '" -C "' + AppDir + '\ui"',
+      '', ResultCode);
+    TechLog('  UI extracted to ' + AppDir + '\ui (exit code: ' + IntToStr(ResultCode) + ')');
   end
   else
   begin
-    TechLog('  [WARNING] Pre-built download failed. Trying Flutter build...');
+    TechLog('  [WARNING] Pre-built download failed (code: ' + IntToStr(ResultCode) + ')');
 
-    // Fallback: build from source if Flutter SDK is available
     if FileExists('C:\flutter\bin\flutter.bat') then
     begin
-      TechLog('  Flutter SDK found at C:\flutter. Building from source...');
+      TechLog('  Fallback: building from source with Flutter SDK...');
       ProgressPage.SetText('Building LexiCore UI from source...', 'This may take 1-2 minutes...');
 
-      PSCommand := 'Copy-Item -Path "' + SourceDir + '\ui" -Destination "' + AppDir + '\ui_src" -Recurse -Force';
-      RunCmd('powershell.exe', '-NoProfile -ExecutionPolicy Bypass -Command "' + PSCommand + '"', '', ResultCode);
-
-      RunCmd('cmd.exe', '/c "C:\flutter\bin\flutter.bat" pub get 2>&1', AppDir + '\ui_src', ResultCode);
-      RunCmd('cmd.exe', '/c "C:\flutter\bin\flutter.bat" build windows --release 2>&1', AppDir + '\ui_src', ResultCode);
+      RunCmd('cmd.exe', '/c xcopy "' + SourceDir + '\ui" "' + AppDir + '\ui_src" /E /I /Y /Q', '', ResultCode);
+      RunCmd('cmd.exe', '/c "C:\flutter\bin\flutter.bat" pub get', AppDir + '\ui_src', ResultCode);
+      RunCmd('cmd.exe', '/c "C:\flutter\bin\flutter.bat" build windows --release', AppDir + '\ui_src', ResultCode);
 
       if ResultCode = 0 then
       begin
-        TechLog('  Flutter build successful');
-        PSCommand := 'Copy-Item -Path "' + AppDir + '\ui_src\build\windows\x64\runner\Release\*" -Destination "' + AppDir + '\ui" -Recurse -Force; ' +
-                     'Remove-Item -Path "' + AppDir + '\ui_src" -Recurse -Force -ErrorAction SilentlyContinue';
-        RunCmd('powershell.exe', '-NoProfile -ExecutionPolicy Bypass -Command "' + PSCommand + '"', '', ResultCode);
-        TechLog('  UI deployed to ' + AppDir + '\ui');
+        RunCmd('cmd.exe', '/c xcopy "' + AppDir + '\ui_src\build\windows\x64\runner\Release\*" "' + AppDir + '\ui" /E /I /Y /Q', '', ResultCode);
+        RunCmd('cmd.exe', '/c rmdir /S /Q "' + AppDir + '\ui_src"', '', ResultCode);
+        TechLog('  Flutter build successful, UI deployed');
       end
       else
-      begin
-        TechLog('  [ERROR] Flutter build also failed (code: ' + IntToStr(ResultCode) + ')');
-        MsgBox('Could not set up the UI. Please build manually: cd ui && flutter build windows --release', mbError, MB_OK);
-      end;
+        MsgBox('Could not build the UI. Please build manually.', mbError, MB_OK);
     end
     else
-    begin
-      TechLog('  [ERROR] No Flutter SDK found and download failed.');
-      MsgBox('Could not download LexiCore UI. Please check your internet connection and try again.', mbError, MB_OK);
-    end;
+      MsgBox('Could not download UI and Flutter SDK not found. Please check your internet connection.', mbError, MB_OK);
   end;
 
   // Cleanup temp files
