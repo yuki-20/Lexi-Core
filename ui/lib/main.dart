@@ -22,8 +22,11 @@ import 'pages/lexi_ai_page.dart';
 import 'pages/dictionary_page.dart';
 import 'pages/splash_screen.dart';
 
+import 'package:media_kit/media_kit.dart';
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  MediaKit.ensureInitialized();
   runApp(const LexiCoreApp());
 }
 

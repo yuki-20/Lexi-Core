@@ -1,6 +1,9 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:video_player/video_player.dart';
+import 'package:flutter/services.dart';
+import 'package:media_kit/media_kit.dart';
+import 'package:media_kit_video/media_kit_video.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../theme/liquid_glass_theme.dart';
 
@@ -14,20 +17,26 @@ class SplashScreen extends StatefulWidget {
 
 class _SplashScreenState extends State<SplashScreen>
     with TickerProviderStateMixin {
-  late VideoPlayerController _videoController;
+  late final Player _player;
+  late final VideoController _controller;
   bool _videoReady = false;
   bool _showOverlay = false;
   double _progress = 0.0;
   Timer? _progressTimer;
+  bool _finished = false;
 
   @override
   void initState() {
     super.initState();
+    _player = Player();
+    _controller = VideoController(_player);
     _initVideo();
+
     // Show overlay after a slight delay
     Future.delayed(const Duration(milliseconds: 800), () {
       if (mounted) setState(() => _showOverlay = true);
     });
+
     // Simulate loading progress
     _progressTimer = Timer.periodic(const Duration(milliseconds: 50), (timer) {
       if (!mounted) { timer.cancel(); return; }
@@ -42,34 +51,40 @@ class _SplashScreenState extends State<SplashScreen>
   }
 
   Future<void> _initVideo() async {
-    _videoController = VideoPlayerController.asset('assets/videos/Intro.mp4');
     try {
-      await _videoController.initialize();
-      await _videoController.setLooping(false);
-      await _videoController.setVolume(0.5);
-      await _videoController.play();
+      // Extract asset to a temp file for media_kit
+      final data = await rootBundle.load('assets/videos/Intro.mp4');
+      final tempDir = Directory.systemTemp;
+      final tempFile = File('${tempDir.path}/lexicore_intro.mp4');
+      await tempFile.writeAsBytes(data.buffer.asUint8List(), flush: true);
+
+      // Play from temp file
+      await _player.open(Media(tempFile.path), play: true);
+      await _player.setVolume(50.0);
+
       if (mounted) setState(() => _videoReady = true);
 
-      _videoController.addListener(() {
-        if (_videoController.value.position >= _videoController.value.duration &&
-            _videoController.value.duration > Duration.zero) {
-          _finishSplash();
-        }
+      // Listen for video completion
+      _player.stream.completed.listen((completed) {
+        if (completed && mounted) _finishSplash();
       });
 
-      // Safety timeout — if video is >8s, auto-skip
+      // Safety timeout — auto-skip after 10s
       Future.delayed(const Duration(seconds: 10), () {
-        if (mounted) _finishSplash();
+        if (mounted && !_finished) _finishSplash();
       });
     } catch (e) {
+      debugPrint('Splash video error: $e');
       // Video failed — skip to app after 3s
       Future.delayed(const Duration(seconds: 3), () {
-        if (mounted) _finishSplash();
+        if (mounted && !_finished) _finishSplash();
       });
     }
   }
 
   void _finishSplash() {
+    if (_finished) return;
+    _finished = true;
     _progressTimer?.cancel();
     widget.onComplete();
   }
@@ -77,7 +92,7 @@ class _SplashScreenState extends State<SplashScreen>
   @override
   void dispose() {
     _progressTimer?.cancel();
-    _videoController.dispose();
+    _player.dispose();
     super.dispose();
   }
 
@@ -107,11 +122,16 @@ class _SplashScreenState extends State<SplashScreen>
             // Video player (centered, letterboxed)
             if (_videoReady)
               Center(
-                child: AspectRatio(
-                  aspectRatio: _videoController.value.aspectRatio,
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(20),
-                    child: VideoPlayer(_videoController),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(20),
+                  child: SizedBox(
+                    width: MediaQuery.of(context).size.width * 0.85,
+                    height: MediaQuery.of(context).size.height * 0.6,
+                    child: Video(
+                      controller: _controller,
+                      controls: NoVideoControls,
+                      fill: Colors.transparent,
+                    ),
                   ),
                 ),
               ).animate().fadeIn(duration: 600.ms),
