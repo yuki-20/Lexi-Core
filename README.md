@@ -25,7 +25,7 @@
 - **Word of the Day** with 2-hour local rotation or curated online picks
 
 ### 🤖 Lexi AI Assistant
-- **10 LLM models** via FPT AI Factory (DeepSeek-R1, Qwen3, Gemma 3, Llama 3.3, GLM-4, and more)
+- **10 LLM models** (DeepSeek-R1, Qwen3, Gemma 3, Llama 3.3, GLM-4, and more)
 - **Real-time streaming** with Server-Sent Events (SSE)
 - **Chain-of-Thought (CoT)** — `<think>` tag extraction with collapsible accordion UI
 - **Web Search (RAG)** — DuckDuckGo web search with results injected into system prompt
