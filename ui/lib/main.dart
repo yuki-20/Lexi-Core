@@ -1,4 +1,4 @@
-/// LexiCore Engine v5.0 — Claude-Style Sidebar Layout
+/// LexiCore Engine v5.5 — Liquid Glass Sidebar Layout
 /// Left glass sidebar with vertical navigation, level badge, + pet companion.
 /// Center area with page content over liquid glass background.
 library;
@@ -20,22 +20,34 @@ import 'pages/settings_page.dart';
 import 'pages/projects_page.dart';
 import 'pages/lexi_ai_page.dart';
 import 'pages/dictionary_page.dart';
+import 'pages/splash_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   runApp(const LexiCoreApp());
 }
 
-class LexiCoreApp extends StatelessWidget {
+class LexiCoreApp extends StatefulWidget {
   const LexiCoreApp({super.key});
+
+  @override
+  State<LexiCoreApp> createState() => _LexiCoreAppState();
+}
+
+class _LexiCoreAppState extends State<LexiCoreApp> {
+  bool _showSplash = true;
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'LexiCore Engine',
+      title: 'LexiCore',
       debugShowCheckedModeBanner: false,
       theme: LiquidGlassTheme.dark,
-      home: const LexiCoreShell(),
+      home: _showSplash
+          ? SplashScreen(onComplete: () {
+              if (mounted) setState(() => _showSplash = false);
+            })
+          : const LexiCoreShell(),
     );
   }
 }

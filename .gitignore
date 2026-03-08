@@ -37,3 +37,9 @@ build/
 ui/build/
 ui/.dart_tool/
 ui/.flutter-plugins-dependencies
+
+# Installer output
+installer/output/
+
+# Large video assets (bundled in release, not in repo)
+ui/assets/videos/
