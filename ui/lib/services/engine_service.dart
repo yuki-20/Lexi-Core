@@ -17,6 +17,25 @@ class EngineService {
   factory EngineService() => _instance;
   EngineService._();
 
+  /// Poll backend until it's ready (up to 15 seconds).
+  /// On fresh install, the auto-build takes extra time.
+  Future<bool> waitForReady({int maxAttempts = 15}) async {
+    for (int i = 0; i < maxAttempts; i++) {
+      try {
+        final resp = await http.get(
+          Uri.parse('$_baseUrl/api/stats'),
+        ).timeout(const Duration(seconds: 2));
+        if (resp.statusCode == 200) {
+          final data = jsonDecode(resp.body);
+          if (data['ready'] == true) return true;
+        }
+      } catch (_) {}
+      await Future.delayed(const Duration(seconds: 1));
+    }
+    return false;
+  }
+
+
   WebSocketChannel? _ws;
   final _autocompleteController = StreamController<AutocompleteResult>.broadcast();
   Stream<AutocompleteResult> get autocompleteStream => _autocompleteController.stream;

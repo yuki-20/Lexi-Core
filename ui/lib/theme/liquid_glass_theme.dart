@@ -67,9 +67,66 @@ class LiquidGlassTheme {
   static const double borderRadiusLg = 28.0;
   static const double borderRadiusPill = 50.0;
 
+  // ── Safe font helper — falls back to Segoe UI if Google Fonts unavailable ──
+  static const _fallback = 'Segoe UI';
+
+  static TextStyle _safeOutfit({
+    double fontSize = 14,
+    FontWeight fontWeight = FontWeight.w400,
+    Color color = textPrimary,
+    double letterSpacing = 0,
+    double? height,
+  }) {
+    try {
+      return GoogleFonts.outfit(
+        fontSize: fontSize,
+        fontWeight: fontWeight,
+        color: color,
+        letterSpacing: letterSpacing,
+        height: height,
+      );
+    } catch (_) {
+      return TextStyle(
+        fontFamily: _fallback,
+        fontSize: fontSize,
+        fontWeight: fontWeight,
+        color: color,
+        letterSpacing: letterSpacing,
+        height: height,
+      );
+    }
+  }
+
+  static TextStyle _safeInter({
+    double fontSize = 14,
+    FontWeight fontWeight = FontWeight.w400,
+    Color color = textSecondary,
+    double letterSpacing = 0,
+    double? height,
+  }) {
+    try {
+      return GoogleFonts.inter(
+        fontSize: fontSize,
+        fontWeight: fontWeight,
+        color: color,
+        letterSpacing: letterSpacing,
+        height: height,
+      );
+    } catch (_) {
+      return TextStyle(
+        fontFamily: _fallback,
+        fontSize: fontSize,
+        fontWeight: fontWeight,
+        color: color,
+        letterSpacing: letterSpacing,
+        height: height,
+      );
+    }
+  }
+
   // ── Typography (iOS 26 San Francisco inspired) ─────────────────
 
-  static TextStyle get heading => GoogleFonts.outfit(
+  static TextStyle get heading => _safeOutfit(
     fontSize: 28,
     fontWeight: FontWeight.w700,
     color: textPrimary,
@@ -77,35 +134,47 @@ class LiquidGlassTheme {
     height: 1.2,
   );
 
-  static TextStyle get headingSm => GoogleFonts.outfit(
+  static TextStyle get headingSm => _safeOutfit(
     fontSize: 20,
     fontWeight: FontWeight.w600,
     color: textPrimary,
     letterSpacing: -0.3,
   );
 
-  static TextStyle get body => GoogleFonts.inter(
+  static TextStyle get body => _safeInter(
     fontSize: 14,
     fontWeight: FontWeight.w400,
     color: textSecondary,
     height: 1.5,
   );
 
-  static TextStyle get bodySmall => GoogleFonts.inter(
+  static TextStyle get bodySmall => _safeInter(
     fontSize: 12,
     fontWeight: FontWeight.w400,
     color: textMuted,
     height: 1.4,
   );
 
-  static TextStyle get mono => GoogleFonts.jetBrainsMono(
-    fontSize: 11,
-    fontWeight: FontWeight.w400,
-    color: textMuted,
-    letterSpacing: 0.5,
-  );
+  static TextStyle get mono {
+    try {
+      return GoogleFonts.jetBrainsMono(
+        fontSize: 11,
+        fontWeight: FontWeight.w400,
+        color: textMuted,
+        letterSpacing: 0.5,
+      );
+    } catch (_) {
+      return const TextStyle(
+        fontFamily: 'Consolas',
+        fontSize: 11,
+        fontWeight: FontWeight.w400,
+        color: textMuted,
+        letterSpacing: 0.5,
+      );
+    }
+  }
 
-  static TextStyle get label => GoogleFonts.inter(
+  static TextStyle get label => _safeInter(
     fontSize: 11,
     fontWeight: FontWeight.w600,
     color: textSecondary,
@@ -114,33 +183,42 @@ class LiquidGlassTheme {
 
   // ── Material Theme ─────────────────────────────────────────────
 
-  static ThemeData get dark => ThemeData(
-    brightness: Brightness.dark,
-    scaffoldBackgroundColor: bgDeep,
-    colorScheme: ColorScheme.dark(
-      primary: accentPrimary,
-      secondary: accentSecondary,
-      surface: bgDeep,
-    ),
-    textTheme: TextTheme(
-      headlineLarge: heading,
-      headlineSmall: headingSm,
-      bodyLarge: body,
-      bodySmall: bodySmall,
-      labelSmall: mono,
-    ),
-    fontFamily: GoogleFonts.inter().fontFamily,
-    scrollbarTheme: ScrollbarThemeData(
-      thumbColor: WidgetStateProperty.all(glassBorder),
-      trackColor: WidgetStateProperty.all(Colors.transparent),
-      thickness: WidgetStateProperty.all(5),
-      radius: const Radius.circular(10),
-      crossAxisMargin: 2,
-      mainAxisMargin: 4,
-      thumbVisibility: WidgetStateProperty.all(false),
-      interactive: true,
-    ),
-  );
+  static ThemeData get dark {
+    String? fontFamily;
+    try {
+      fontFamily = GoogleFonts.inter().fontFamily;
+    } catch (_) {
+      fontFamily = _fallback;
+    }
+
+    return ThemeData(
+      brightness: Brightness.dark,
+      scaffoldBackgroundColor: bgDeep,
+      colorScheme: ColorScheme.dark(
+        primary: accentPrimary,
+        secondary: accentSecondary,
+        surface: bgDeep,
+      ),
+      textTheme: TextTheme(
+        headlineLarge: heading,
+        headlineSmall: headingSm,
+        bodyLarge: body,
+        bodySmall: bodySmall,
+        labelSmall: mono,
+      ),
+      fontFamily: fontFamily,
+      scrollbarTheme: ScrollbarThemeData(
+        thumbColor: WidgetStateProperty.all(glassBorder),
+        trackColor: WidgetStateProperty.all(Colors.transparent),
+        thickness: WidgetStateProperty.all(5),
+        radius: const Radius.circular(10),
+        crossAxisMargin: 2,
+        mainAxisMargin: 4,
+        thumbVisibility: WidgetStateProperty.all(false),
+        interactive: true,
+      ),
+    );
+  }
 
   // ── Helpers ──────────────────────────────────────────────────────
 

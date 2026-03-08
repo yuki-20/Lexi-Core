@@ -117,6 +117,8 @@ class _LexiCoreShellState extends State<LexiCoreShell>
 
   Future<void> _loadPetData() async {
     try {
+      // Wait for backend to be ready (important on fresh install — auto-build takes time)
+      await _engine.waitForReady();
       final pets = await _engine.getAllPets();
       final stats = await _engine.getStats();
       final xpStatus = await _engine.getXpStatus();
