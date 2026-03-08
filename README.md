@@ -138,7 +138,7 @@ LexiCore v5.4
 ### Prerequisites
 - **Python 3.12+** with pip
 - **Flutter 3.x** (Windows desktop enabled)
-- **FPT AI Factory API key** (for Lexi AI features)
+- **Lexi AI**
 
 ### Backend Setup
 
