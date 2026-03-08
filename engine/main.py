@@ -840,15 +840,11 @@ async def api_import_file(file: UploadFile = File(...)):
     if not words:
         return JSONResponse({"error": "No words found in file"}, status_code=400)
 
-    # Save to DB
+    # Save to DB (save words without blocking on definition lookup — digest handles that)
     file_id = engine.db.add_imported_file(filename, len(words))
     for word in words:
-        if isinstance(word, str):
-            defn = engine.get_definition_dict(word)
-            definition = None
-            if defn and defn.get("definitions"):
-                definition = defn["definitions"][0] if isinstance(defn["definitions"], list) else str(defn["definitions"])
-            engine.db.save_word(word, definition=definition, source_file=filename)
+        if isinstance(word, str) and word:
+            engine.db.save_word(word, source_file=filename)
 
     return JSONResponse({
         "file_id": file_id,
@@ -1782,6 +1778,66 @@ async def api_import_file_stream(
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
 
+
+# ══════════════════════════════════════════════════════════════════════
+# v5.5 — PET COLLECTION
+# ══════════════════════════════════════════════════════════════════════
+
+@app.get("/api/pets")
+async def api_get_pets():
+    """Return pet collection with unlock status."""
+    unlocked_ids = {p["pet_id"] for p in engine.db.get_unlocked_pets()}
+    pets = []
+    for pet_id, info in engine.db.PETS.items():
+        pets.append({
+            "id": pet_id,
+            "name": info["name"],
+            "description": info.get("desc", ""),
+            "requirement": f"Reach a {info['streak_req']}-day streak" if info.get("streak_req") else f"Get {info.get('requires_perfect_quizzes', 0)} perfect quizzes",
+            "unlocked": pet_id in unlocked_ids,
+        })
+    return JSONResponse({"pets": pets})
+
+
+@app.post("/api/pets/check")
+async def api_check_pet_unlocks():
+    """Check and unlock newly eligible pets."""
+    newly = engine.db.check_pet_eligibility()
+    for pet_id in newly:
+        engine.db.unlock_pet(pet_id)
+    return JSONResponse({"unlocked": newly})
+
+
+# ══════════════════════════════════════════════════════════════════════
+# v5.5 — DAILY / WEEKLY QUESTS
+# ══════════════════════════════════════════════════════════════════════
+
+@app.get("/api/quests")
+async def api_get_quests():
+    """Return daily/weekly quests with progress."""
+    quests = engine.db.get_quest_progress()
+    return JSONResponse({"quests": quests})
+
+
+# ══════════════════════════════════════════════════════════════════════
+# v5.5 — ADD SAVED WORDS TO DICTIONARY
+# ══════════════════════════════════════════════════════════════════════
+
+@app.post("/api/dictionary/add-saved")
+async def api_add_saved_to_dictionary():
+    """Add all saved words (with definitions) to the dictionary index."""
+    saved = engine.db.get_saved_words()
+    added = 0
+    for word_entry in saved:
+        word = word_entry.get("word", "")
+        defn = word_entry.get("definition")
+        if word and defn:
+            existing = engine.index_store.lookup(word)
+            if existing is None:
+                engine.trie.insert(word)
+                engine.bloom.add(word)
+                added += 1
+    return JSONResponse({"added": added, "total": len(saved)})
 
 # ── Run ───────────────────────────────────────────────────────────────
 
