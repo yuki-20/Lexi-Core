@@ -190,7 +190,6 @@ flutter run -d windows
 
 | Variable | Description | Default |
 |---|---|---|
-| `LEXI_ADMIN_KEY` | Password for API key decryption | `LexiAdmin2026` |
 | `LEXI_PORT` | Backend server port | `8741` |
 
 ---
@@ -412,7 +411,7 @@ python -m pytest engine/tests/ --cov=engine --cov-report=html
 | **Backend** | Python 3.12+, FastAPI, Uvicorn, httpx |
 | **Frontend** | Flutter 3.x (Windows Desktop) |
 | **Database** | SQLite (WAL mode, 30s busy timeout) |
-| **AI** | FPT AI Factory API (10 LLMs) |
+| **AI** | (10 LLMs) |
 | **Web Search** | DuckDuckGo HTML API |
 | **Definitions** | dictionaryapi.dev (online fallback) |
 | **Data Structures** | Huffman tree, Trie, Bloom filter, TF-IDF inverted index |
