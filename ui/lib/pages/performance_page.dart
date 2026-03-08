@@ -57,6 +57,8 @@ class _PerformancePageState extends State<PerformancePage> {
 
   Future<void> _loadData() async {
     try {
+      // Wait for backend to be ready (auto-build on fresh install takes time)
+      await _engine.waitForReady();
       // Fire ALL requests in parallel instead of sequentially
       final results = await Future.wait([
         _engine.getStats().timeout(const Duration(seconds: 5), onTimeout: () => <String, dynamic>{}),

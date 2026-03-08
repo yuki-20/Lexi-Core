@@ -74,6 +74,7 @@ class _LexiAiPageState extends State<LexiAiPage> {
   }
 
   Future<void> _loadHistory() async {
+    await _engine.waitForReady();
     final h = await _engine.getAiHistory();
     if (mounted) setState(() => _history = h);
   }

@@ -41,6 +41,7 @@ class _FlashcardsPageState extends State<FlashcardsPage> {
 
   Future<void> _loadDecks() async {
     setState(() => _loading = true);
+    await _engine.waitForReady();
     final decks = await _engine.getDecks();
     if (mounted) {
       setState(() {

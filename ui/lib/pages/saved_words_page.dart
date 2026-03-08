@@ -53,6 +53,7 @@ class _SavedWordsPageState extends State<SavedWordsPage> with SingleTickerProvid
   }
 
   Future<void> _loadData() async {
+    await _engine.waitForReady();
     final words = await _engine.getSavedWords();
     final files = await _engine.getImportedFiles();
     if (mounted) {

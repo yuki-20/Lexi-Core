@@ -56,6 +56,8 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> _loadData() async {
+    // Wait for backend to be ready (auto-build on fresh install takes time)
+    await _engine.waitForReady();
     final profile = await _engine.getProfile();
     final wotd = await _engine.getWordOfTheDay(mode: 'online', hours: 2);
 

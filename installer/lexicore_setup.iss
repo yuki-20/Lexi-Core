@@ -497,3 +497,20 @@ begin
     ProgressPage.Hide;
   end;
 end;
+
+// ─── Kill LexiCore processes before uninstall ─────────────────
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+var
+  ResultCode: Integer;
+begin
+  if CurUninstallStep = usUninstall then
+  begin
+    // Kill the LexiCore UI and Python backend before removing files
+    Exec('cmd.exe', '/c taskkill /f /im lexicore_ui.exe 2>nul', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    Exec('cmd.exe', '/c taskkill /f /im python.exe /fi "WINDOWTITLE eq LexiCore*" 2>nul', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    // Kill any python process running the engine on port 8741
+    Exec('cmd.exe', '/c for /f "tokens=5" %a in (''netstat -aon ^| findstr :8741'') do taskkill /f /pid %a 2>nul', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    // Small delay to let processes fully terminate
+    Sleep(1000);
+  end;
+end;
