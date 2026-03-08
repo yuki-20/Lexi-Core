@@ -171,53 +171,14 @@ class _FlashcardsPageState extends State<FlashcardsPage> {
   }
 
   Future<void> _addCardToDeck() async {
-    final wordCtrl = TextEditingController();
-    final defCtrl = TextEditingController();
-    final result = await showDialog<bool>(
+    final picked = await showDialog<Map<String, String>>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: LiquidGlassTheme.bgDeep,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Text('Add Card', style: LiquidGlassTheme.headingSm),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: wordCtrl,
-              autofocus: true,
-              style: LiquidGlassTheme.body.copyWith(color: LiquidGlassTheme.textPrimary),
-              decoration: InputDecoration(
-                hintText: 'Word',
-                hintStyle: LiquidGlassTheme.body,
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: defCtrl,
-              style: LiquidGlassTheme.body.copyWith(color: LiquidGlassTheme.textPrimary),
-              maxLines: 3,
-              decoration: InputDecoration(
-                hintText: 'Definition (optional)',
-                hintStyle: LiquidGlassTheme.body,
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Add'),
-          ),
-        ],
-      ),
+      builder: (ctx) => _WordPickerDialog(engine: _engine),
     );
-    if (result == true && wordCtrl.text.isNotEmpty) {
+    if (picked != null && picked['word']!.isNotEmpty) {
       await _engine.addCard(
-        _editDeckId, wordCtrl.text,
-        definition: defCtrl.text.isNotEmpty ? defCtrl.text : null,
+        _editDeckId, picked['word']!,
+        definition: picked['definition']?.isNotEmpty == true ? picked['definition'] : null,
       );
       final cards = await _engine.getCards(_editDeckId);
       setState(() => _editCards = cards);
@@ -699,6 +660,444 @@ class _FlashcardsPageState extends State<FlashcardsPage> {
   }
 }
 
+// ══════════════════════════════════════════════════════════════════════════
+// Word Picker Dialog — 3 tabs: Saved Words, Dictionary Search, Manual
+// ══════════════════════════════════════════════════════════════════════════
+class _WordPickerDialog extends StatefulWidget {
+  final EngineService engine;
+  const _WordPickerDialog({required this.engine});
+  @override
+  State<_WordPickerDialog> createState() => _WordPickerDialogState();
+}
+
+class _WordPickerDialogState extends State<_WordPickerDialog>
+    with SingleTickerProviderStateMixin {
+  late TabController _tabCtrl;
+
+  // Saved words tab
+  List<Map<String, dynamic>> _savedWords = [];
+  bool _loadingSaved = true;
+
+  // Dictionary tab
+  final _searchCtrl = TextEditingController();
+  List<String> _suggestions = [];
+  String? _selectedDictWord;
+  String? _selectedDictDef;
+  bool _searchingDef = false;
+
+  // Manual tab
+  final _manualWordCtrl = TextEditingController();
+  final _manualDefCtrl = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    _tabCtrl = TabController(length: 3, vsync: this);
+    _loadSavedWords();
+  }
+
+  @override
+  void dispose() {
+    _tabCtrl.dispose();
+    _searchCtrl.dispose();
+    _manualWordCtrl.dispose();
+    _manualDefCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadSavedWords() async {
+    final words = await widget.engine.getSavedWords();
+    if (mounted) setState(() { _savedWords = words; _loadingSaved = false; });
+  }
+
+  Future<void> _onSearchChanged(String value) async {
+    if (value.isEmpty) {
+      setState(() { _suggestions = []; _selectedDictWord = null; _selectedDictDef = null; });
+      return;
+    }
+    final results = await widget.engine.getAutocomplete(value);
+    if (mounted) {
+      setState(() {
+        _suggestions = results.map((r) => r.word).where((s) => s.isNotEmpty).toList();
+      });
+    }
+  }
+
+  Future<void> _selectDictWord(String word) async {
+    setState(() { _selectedDictWord = word; _searchingDef = true; _selectedDictDef = null; });
+    try {
+      final result = await widget.engine.searchExact(word);
+      final defText = result.definitions.isNotEmpty ? result.definitions.join('; ') : '';
+      if (mounted) setState(() { _selectedDictDef = defText; _searchingDef = false; });
+    } catch (_) {
+      if (mounted) setState(() { _selectedDictDef = ''; _searchingDef = false; });
+    }
+  }
+
+  InputDecoration _inputDeco(String hint) => InputDecoration(
+    hintText: hint,
+    hintStyle: LiquidGlassTheme.body.copyWith(color: Colors.white.withValues(alpha: 0.3)),
+    filled: true,
+    fillColor: Colors.white.withValues(alpha: 0.05),
+    border: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(12),
+      borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
+    ),
+    enabledBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(12),
+      borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
+    ),
+    focusedBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(12),
+      borderSide: const BorderSide(color: LiquidGlassTheme.accentPrimary),
+    ),
+    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: LiquidGlassTheme.bgDeep,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 28, vertical: 60),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 480, maxHeight: 520),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // ── Header ──
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 20, 16, 0),
+              child: Row(
+                children: [
+                  const Icon(Icons.add_circle_outline_rounded, color: LiquidGlassTheme.accentPrimary, size: 22),
+                  const SizedBox(width: 10),
+                  Text('Add Card', style: LiquidGlassTheme.headingSm),
+                  const Spacer(),
+                  IconButton(
+                    icon: const Icon(Icons.close_rounded, size: 20, color: LiquidGlassTheme.textMuted),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                ],
+              ),
+            ),
+
+            // ── Tab Bar ──
+            Container(
+              margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(12),
+                color: Colors.white.withValues(alpha: 0.05),
+              ),
+              child: TabBar(
+                controller: _tabCtrl,
+                indicator: BoxDecoration(
+                  borderRadius: BorderRadius.circular(10),
+                  color: LiquidGlassTheme.accentPrimary.withValues(alpha: 0.2),
+                ),
+                indicatorSize: TabBarIndicatorSize.tab,
+                labelColor: LiquidGlassTheme.accentPrimary,
+                unselectedLabelColor: LiquidGlassTheme.textMuted,
+                labelStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                unselectedLabelStyle: const TextStyle(fontSize: 12),
+                dividerHeight: 0,
+                tabs: const [
+                  Tab(text: '⭐ Saved', height: 36),
+                  Tab(text: '📖 Dictionary', height: 36),
+                  Tab(text: '✏️ Manual', height: 36),
+                ],
+              ),
+            ),
+
+            // ── Tab Content ──
+            Expanded(
+              child: TabBarView(
+                controller: _tabCtrl,
+                children: [
+                  _buildSavedTab(),
+                  _buildDictionaryTab(),
+                  _buildManualTab(),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ── Tab 1: Saved Words ──
+  Widget _buildSavedTab() {
+    if (_loadingSaved) {
+      return const Center(child: CircularProgressIndicator(color: LiquidGlassTheme.accentPrimary));
+    }
+    if (_savedWords.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.bookmark_border_rounded, size: 40, color: LiquidGlassTheme.textMuted),
+            const SizedBox(height: 12),
+            Text('No saved words yet', style: LiquidGlassTheme.body),
+            const SizedBox(height: 4),
+            Text('Save words from search to see them here', style: LiquidGlassTheme.bodySmall),
+          ],
+        ),
+      );
+    }
+    return ListView.builder(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+      itemCount: _savedWords.length,
+      itemBuilder: (ctx, i) {
+        final w = _savedWords[i];
+        final word = w['word']?.toString() ?? '';
+        final def = w['definition']?.toString() ?? '';
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 6),
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(12),
+              onTap: () => Navigator.pop(context, {'word': word, 'definition': def}),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(12),
+                  color: Colors.white.withValues(alpha: 0.04),
+                  border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 32, height: 32,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(8),
+                        color: LiquidGlassTheme.accentPrimary.withValues(alpha: 0.15),
+                      ),
+                      child: Center(
+                        child: Text(
+                          word.isNotEmpty ? word[0].toUpperCase() : '?',
+                          style: const TextStyle(
+                            fontSize: 14, fontWeight: FontWeight.w700,
+                            color: LiquidGlassTheme.accentPrimary,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(word, style: const TextStyle(
+                            fontSize: 14, fontWeight: FontWeight.w600,
+                            color: LiquidGlassTheme.textPrimary,
+                          )),
+                          if (def.isNotEmpty) ...[
+                            const SizedBox(height: 2),
+                            Text(def, style: LiquidGlassTheme.bodySmall.copyWith(fontSize: 11),
+                              maxLines: 1, overflow: TextOverflow.ellipsis),
+                          ],
+                        ],
+                      ),
+                    ),
+                    const Icon(Icons.add_rounded, size: 18, color: LiquidGlassTheme.accentPrimary),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  // ── Tab 2: Dictionary Search ──
+  Widget _buildDictionaryTab() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+      child: Column(
+        children: [
+          // Search field
+          TextField(
+            controller: _searchCtrl,
+            style: LiquidGlassTheme.body.copyWith(color: LiquidGlassTheme.textPrimary, fontSize: 14),
+            decoration: _inputDeco('Search dictionary...').copyWith(
+              prefixIcon: const Icon(Icons.search_rounded, size: 20, color: LiquidGlassTheme.textMuted),
+            ),
+            onChanged: _onSearchChanged,
+          ),
+          const SizedBox(height: 10),
+
+          // Selected word preview
+          if (_selectedDictWord != null)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(14),
+              margin: const EdgeInsets.only(bottom: 10),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(12),
+                color: LiquidGlassTheme.accentPrimary.withValues(alpha: 0.08),
+                border: Border.all(color: LiquidGlassTheme.accentPrimary.withValues(alpha: 0.3)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Text(_selectedDictWord!, style: const TextStyle(
+                        fontSize: 16, fontWeight: FontWeight.w700, color: LiquidGlassTheme.accentPrimary,
+                      )),
+                      const Spacer(),
+                      if (_searchingDef)
+                        const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(
+                          strokeWidth: 1.5, color: LiquidGlassTheme.accentPrimary,
+                        ))
+                      else
+                        GestureDetector(
+                          onTap: () => Navigator.pop(context, {
+                            'word': _selectedDictWord!,
+                            'definition': _selectedDictDef ?? '',
+                          }),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(8),
+                              color: LiquidGlassTheme.accentPrimary,
+                            ),
+                            child: const Text('Add', style: TextStyle(
+                              fontSize: 12, fontWeight: FontWeight.w600, color: Colors.white,
+                            )),
+                          ),
+                        ),
+                    ],
+                  ),
+                  if (_selectedDictDef != null && _selectedDictDef!.isNotEmpty) ...[
+                    const SizedBox(height: 6),
+                    Text(
+                      _selectedDictDef!,
+                      style: LiquidGlassTheme.bodySmall.copyWith(fontSize: 12),
+                      maxLines: 3,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ],
+              ),
+            ),
+
+          // Suggestions list
+          Expanded(
+            child: _suggestions.isEmpty
+                ? Center(
+                    child: Text(
+                      _searchCtrl.text.isEmpty ? 'Type to search the dictionary' : 'No results found',
+                      style: LiquidGlassTheme.bodySmall,
+                    ),
+                  )
+                : ListView.builder(
+                    itemCount: _suggestions.length,
+                    itemBuilder: (ctx, i) {
+                      final word = _suggestions[i];
+                      final isSelected = word == _selectedDictWord;
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 4),
+                        child: Material(
+                          color: Colors.transparent,
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(10),
+                            onTap: () => _selectDictWord(word),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(10),
+                                color: isSelected
+                                    ? LiquidGlassTheme.accentPrimary.withValues(alpha: 0.12)
+                                    : Colors.white.withValues(alpha: 0.03),
+                                border: Border.all(
+                                  color: isSelected
+                                      ? LiquidGlassTheme.accentPrimary.withValues(alpha: 0.4)
+                                      : Colors.white.withValues(alpha: 0.05),
+                                ),
+                              ),
+                              child: Row(
+                                children: [
+                                  Text(word, style: TextStyle(
+                                    fontSize: 13, fontWeight: FontWeight.w500,
+                                    color: isSelected ? LiquidGlassTheme.accentPrimary : LiquidGlassTheme.textPrimary,
+                                  )),
+                                  const Spacer(),
+                                  Icon(
+                                    isSelected ? Icons.check_circle_rounded : Icons.arrow_forward_ios_rounded,
+                                    size: 14,
+                                    color: isSelected ? LiquidGlassTheme.accentPrimary : LiquidGlassTheme.textMuted,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── Tab 3: Manual Entry ──
+  Widget _buildManualTab() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+      child: Column(
+        children: [
+          TextField(
+            controller: _manualWordCtrl,
+            autofocus: false,
+            style: LiquidGlassTheme.body.copyWith(color: LiquidGlassTheme.textPrimary, fontSize: 14),
+            decoration: _inputDeco('Word'),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _manualDefCtrl,
+            style: LiquidGlassTheme.body.copyWith(color: LiquidGlassTheme.textPrimary, fontSize: 14),
+            maxLines: 3,
+            decoration: _inputDeco('Definition (optional)'),
+          ),
+          const SizedBox(height: 20),
+          SizedBox(
+            width: double.infinity,
+            child: GestureDetector(
+              onTap: () {
+                if (_manualWordCtrl.text.trim().isNotEmpty) {
+                  Navigator.pop(context, {
+                    'word': _manualWordCtrl.text.trim(),
+                    'definition': _manualDefCtrl.text.trim(),
+                  });
+                }
+              },
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(14),
+                  gradient: const LinearGradient(colors: [
+                    LiquidGlassTheme.accentPrimary,
+                    LiquidGlassTheme.accentSecondary,
+                  ]),
+                ),
+                child: const Center(
+                  child: Text('Add Card', style: TextStyle(
+                    fontSize: 14, fontWeight: FontWeight.w600, color: Colors.white,
+                  )),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
 class _StudyButton extends StatelessWidget {
   final String label;
   final Color color;

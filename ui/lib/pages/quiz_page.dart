@@ -46,7 +46,7 @@ class _QuizPageState extends State<QuizPage> {
     _timer.reset();
     _timer.start();
     setState(() {
-      _questions = data['questions'];
+      _questions = (data['questions'] as List?) ?? [];
       _qIndex = 0;
       _score = 0;
       _selectedOption = null;
