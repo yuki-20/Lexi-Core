@@ -93,8 +93,8 @@ class _PerformancePageState extends State<PerformancePage> {
         _xpForNext = (xpStatus['xp_for_next'] as num?)?.toInt() ?? 100;
 
         _quizzesTaken = (quizPerf['total_quizzes'] as num?)?.toInt() ?? 0;
-        _quizCorrect = (quizPerf['correct_answers'] as num?)?.toInt() ?? 0;
-        _quizTotal = (quizPerf['total_answers'] as num?)?.toInt() ?? 0;
+        _quizCorrect = (quizPerf['total_correct'] as num?)?.toInt() ?? 0;
+        _quizTotal = (quizPerf['total_questions'] as num?)?.toInt() ?? 0;
 
         _pets = List<Map<String, dynamic>>.from(pets);
         _quests = List<Map<String, dynamic>>.from(quests);

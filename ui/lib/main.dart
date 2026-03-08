@@ -122,7 +122,7 @@ class _LexiCoreShellState extends State<LexiCoreShell>
       final xpStatus = await _engine.getXpStatus();
       if (mounted) {
         setState(() {
-          _activePet = pets.firstWhere(
+          _activePet = pets.lastWhere(
             (p) => p['unlocked'] == true,
             orElse: () => <String, dynamic>{},
           );

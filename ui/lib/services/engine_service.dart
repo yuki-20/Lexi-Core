@@ -665,7 +665,7 @@ class EngineService {
   Future<Map<String, dynamic>?> createProjectDeck(int projectId, String name) async {
     try {
       final resp = await http.post(
-        Uri.parse('$_baseUrl/api/projects/$projectId/decks'),
+        Uri.parse('$_baseUrl/api/projects/$projectId/deck'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'name': name, 'source': 'project:$projectId'}),
       ).timeout(const Duration(seconds: 3));
