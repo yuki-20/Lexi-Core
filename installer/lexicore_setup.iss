@@ -281,6 +281,11 @@ begin
     TechLog('[CLEAN] Removing old scripts...');
     DelTree(ExpandConstant('{app}\scripts'), True, True, True);
   end;
+  if DirExists(ExpandConstant('{app}\data')) then
+  begin
+    TechLog('[CLEAN] Removing old user data (fresh install)...');
+    DelTree(ExpandConstant('{app}\data'), True, True, True);
+  end;
 end;
 
 // ─── Main install: Download from GitHub + setup ───────────────
