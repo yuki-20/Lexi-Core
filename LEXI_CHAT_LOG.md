@@ -1188,3 +1188,182 @@ C:\flutter\bin\flutter.bat run -d windows
 **Step 4 — Logged this full session to `LEXI_CHAT_LOG.md`.**
 
 ---
+
+## Session — 2026-03-08 15:47 — LexiCore v5.1 Implementation
+
+### 🧑 Prompt
+
+```
+run the app
+```
+
+### 🤖 Response
+
+Killed port 8741, started backend (`python -m engine.main` → running on `http://127.0.0.1:8741`), launched Flutter (`flutter run -d windows` → built in 6.3s, launched on Windows). App running.
+
+---
+
+### 🧑 Prompt
+
+```
+Fix the error when i navigate the vertical bar it appear some error notification below the Pet section when expanding and closing
+Fix the pet collection not showing informations and pet image
+
+fix the error for the word of the day ( when i click on tap the word for more details it doesn't work ), Hide the word of the day when user query a word so it don't repeative , Make the word of the day use online mode, rotation and have the option to change word every 2 hours based on day time
+
+Add word indexing based on the alphabet when the user query a word, it will predict/list the word in real-time that have the same matching like the word user query for example :
+user query the word " Cat "
+It will predict real time for every word the user type in
+for the letter c will be like come, corn etcc
+and when the user input the second character it will do the very same using online service
+fix the problem where i still can't access the project space ( quiz and flashcard in it )
+add quest to the XP and make it more optimized so it will also reflects user actual learning rate
+```
+
+### 🤖 Response — Planning
+
+Created implementation plan for v5.1 with 6 major items:
+
+1. **Sidebar Overflow Fix** — Apply LayoutBuilder to pet section (same pattern as nav items)
+2. **Pet Collection** — Fix API to map `desc` → `description`, add unlock `requirement` text
+3. **WOTD Improvements** — 2-hour rotation seed, online mode via Cambridge, hide when queried, refresh button
+4. **Real-Time Autocomplete** — Supplement local trie with Datamuse API when < 5 local results
+5. **Project Space** — New `ProjectDetailPage` with deck list, tap-to-open from projects list
+6. **XP Quests** — Daily/weekly quests with progress tracking + XP rewards
+
+Plan approved (LGTM).
+
+### 🤖 Response — Execution
+
+**Files Modified (10 total):**
+
+**1. `ui/lib/main.dart` — Sidebar Pet Fix:**
+- Replaced `_sidebarExpanded` boolean check in `_buildPetSection()` with `LayoutBuilder` that checks `constraints.maxWidth > 100`
+- Added `Flexible` widget + `mainAxisSize: MainAxisSize.min` to streak Row to prevent text overflow
+- Removed old `ClipRect` wrapper (no longer needed with LayoutBuilder)
+
+**2. `engine/main.py` — Pet API Fix:**
+```python
+# Before: **info spread all raw dict keys (desc, emoji, streak_req)
+pets.append({"id": pet_id, **info, "unlocked": pet_id in unlocked})
+
+# After: explicit key mapping
+pets.append({
+    "id": pet_id,
+    "name": info["name"],
+    "description": info.get("desc", ""),
+    "requirement": req_text,  # "Reach 7-day streak" or "Get 3 perfect quiz scores"
+    "streak_req": streak_req,
+    "unlocked": pet_id in unlocked,
+})
+```
+
+**3. `engine/learning/wotd.py` — WOTD 2-Hour Rotation + Online:**
+- Added `get_wotd_for_period(hours=2)` — seeds with `YYYYMMDD * 100 + (hour // hours)` for 2-hour rotation
+- Added `get_curated_wotd(hours=2)` — picks from 75 curated interesting words (serendipity, ephemeral, luminous, etc.)
+- Added `CURATED_WORDS` list (75 words)
+
+**4. `engine/main.py` — WOTD Endpoint Upgrade:**
+```python
+@app.get("/api/wotd")
+async def api_word_of_the_day(mode: str = Query("local"), hours: int = Query(2, ge=1, le=12)):
+    if mode == "online":
+        word = get_curated_wotd(hours=hours)
+        online_def = await lookup_online(word)  # Cambridge fallback
+        ...
+    else:
+        word = get_wotd_for_period(word_iterator=..., hours=hours)
+        ...
+```
+
+**5. `engine/main.py` — Datamuse Autocomplete Fallback:**
+```python
+# When local trie returns < 5 results, supplement with Datamuse API
+if len(results) < 5:
+    async with httpx.AsyncClient(timeout=2.0) as client:
+        resp = await client.get(f"https://api.datamuse.com/sug?s={prefix}&max={limit}")
+        # Merge without duplicates, local first
+```
+Installed `httpx` package.
+
+**6. `engine/learning/db.py` — Quest System:**
+- Added `quest_progress` table: `(quest_id TEXT, period TEXT, progress INTEGER, completed INTEGER, completed_at TEXT)`
+- Added `QUESTS` dict with 6 quests:
+  - Daily: `search_5` (Word Explorer, 50 XP), `quiz_1` (Quiz Challenger, 75 XP), `save_3` (Collector, 60 XP)
+  - Weekly: `search_20` (Deep Diver, 200 XP), `streak_5` (Streak Master, 300 XP), `master_10` (Knowledge Vault, 500 XP)
+- Added `get_quest_progress()` — returns all quests with current period's progress
+- Added `increment_quest(action)` — upserts progress, auto-marks completion, returns newly completed quests
+
+**7. `engine/main.py` — Quest API + XP Wiring:**
+```python
+@app.post("/api/xp/award")
+async def api_xp_award(req: dict):
+    # ... existing XP award logic ...
+    # NEW: Track quest progress
+    quest_action = quest_action_map.get(action, action)
+    completed_quests = engine.db.increment_quest(quest_action)
+    # Award bonus XP for completed quests
+    quest_bonus = sum(q.get("xp", 0) for q in completed_quests)
+    if quest_bonus > 0: engine.db.add_exp(quest_bonus)
+
+@app.get("/api/quests")
+async def api_get_quests():
+    quests = engine.db.get_quest_progress()
+    return JSONResponse({"quests": quests})
+```
+
+**8. `ui/lib/services/engine_service.dart` — Service Methods:**
+- Updated `getAutocomplete()` to handle dict-style responses from Datamuse (parses `{word: "...", source: "online"}`)
+- Updated `getWordOfTheDay({mode: 'online', hours: 2})` with new params
+- Added `getQuests()` → `GET /api/quests`
+- Added `getProject(int projectId)` → `GET /api/projects/{id}`
+- Added `createProjectDeck(int projectId, String name)` → `POST /api/projects/{id}/decks`
+
+**9. `ui/lib/pages/home_page.dart` — WOTD UI:**
+- WOTD hidden when `hasResult` is true (user queried a word): `if (!hasResult && _wotd != null && _wotd!['word'] != null)`
+- Added refresh button with `AnimatedRotation` on WOTD card header
+- Added rotation period indicator ("Rotates every 2h")
+- Fixed tap-to-search with null-safe string cast: `final word = _wotd!['word']?.toString()`
+- Uses online mode by default: `getWordOfTheDay(mode: 'online', hours: 2)`
+
+**10. `ui/lib/pages/project_detail_page.dart` — NEW:**
+- Shows project name, color dot, description
+- Lists decks from `GET /api/projects/{id}` (deck name, created date)
+- "Add Deck" button with dialog → `createProjectDeck()`
+- Quick action chips: "Generate Quiz" and "Flashcards" (navigate to respective pages)
+- Empty state with folder icon
+
+**11. `ui/lib/pages/projects_page.dart` — Tap to Open:**
+- Wrapped `GlassPanel` in `GestureDetector(onTap: ...)` that navigates to `ProjectDetailPage`
+- Added import for `project_detail_page.dart`
+- Refreshes project list on return
+
+**12. `ui/lib/pages/performance_page.dart` — Quest Section + Pet Requirements:**
+- Added `_quests` field and quest loading (after setState to avoid await-in-setState error)
+- Added 🎯 Quests section between level overview and stats grid:
+  - Each quest shows: type badge (daily/weekly icon), name, description, progress/target, XP reward badge, progress bar
+  - Completed quests show green check + strikethrough text
+- Added 🔑 unlock requirement text below locked pets (e.g., "🔑 Reach 7-day streak")
+
+### 🤖 Response — Verification
+
+- `flutter analyze` → **0 errors** (3 info-level only)
+- Fixed 2 compile errors during verification:
+  - `await_in_wrong_context` → moved quest loading after `setState()`
+  - `undefined_getter bgCard` → replaced with `bgDeep`
+- Backend started cleanly on `:8741`
+- Flutter built in 8.7s, launched on Windows
+
+---
+
+### 🧑 Prompt
+
+```
+u forgot about the log..
+```
+
+### 🤖 Response
+
+Appended full verbatim v5.1 session to `LEXI_CHAT_LOG.md`.
+
+---

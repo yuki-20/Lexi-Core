@@ -89,10 +89,13 @@ class EngineService {
   Future<List<AutocompleteItem>> getAutocomplete(String prefix) async {
     try {
       final resp = await http.get(
-        Uri.parse('$_baseUrl/api/autocomplete?prefix=${Uri.encodeComponent(prefix)}&limit=8'),
+        Uri.parse('$_baseUrl/api/autocomplete?prefix=${Uri.encodeComponent(prefix)}&limit=10'),
       ).timeout(const Duration(seconds: 3));
       final data = jsonDecode(resp.body);
-      return (data['suggestions'] as List).map((s) => AutocompleteItem(word: s.toString())).toList();
+      return (data['suggestions'] as List).map((s) {
+        if (s is Map) return AutocompleteItem(word: s['word']?.toString() ?? '');
+        return AutocompleteItem(word: s.toString());
+      }).toList();
     } catch (_) {
       return [];
     }
@@ -112,10 +115,10 @@ class EngineService {
     }
   }
 
-  Future<Map<String, dynamic>?> getWordOfTheDay() async {
+  Future<Map<String, dynamic>?> getWordOfTheDay({String mode = 'online', int hours = 2}) async {
     try {
-      final resp = await http.get(Uri.parse('$_baseUrl/api/wotd'))
-          .timeout(const Duration(seconds: 3));
+      final resp = await http.get(Uri.parse('$_baseUrl/api/wotd?mode=$mode&hours=$hours'))
+          .timeout(const Duration(seconds: 5));
       return jsonDecode(resp.body);
     } catch (_) {
       return null;
@@ -574,6 +577,47 @@ class EngineService {
       return Map<String, dynamic>.from(jsonDecode(resp.body));
     } catch (_) {
       return {};
+    }
+  }
+
+  // ── Quests ──────────────────────────────────────────────────────
+
+  Future<List<Map<String, dynamic>>> getQuests() async {
+    try {
+      final resp = await http.get(Uri.parse('$_baseUrl/api/quests'))
+          .timeout(const Duration(seconds: 3));
+      final data = jsonDecode(resp.body);
+      return List<Map<String, dynamic>>.from(data['quests'] ?? []);
+    } catch (_) {
+      return [];
+    }
+  }
+
+  // ── Project Detail ─────────────────────────────────────────────
+
+  Future<Map<String, dynamic>?> getProject(int projectId) async {
+    try {
+      final resp = await http.get(Uri.parse('$_baseUrl/api/projects/$projectId'))
+          .timeout(const Duration(seconds: 3));
+      if (resp.statusCode == 200) {
+        return jsonDecode(resp.body);
+      }
+      return null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<Map<String, dynamic>?> createProjectDeck(int projectId, String name) async {
+    try {
+      final resp = await http.post(
+        Uri.parse('$_baseUrl/api/projects/$projectId/decks'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'name': name, 'source': 'project:$projectId'}),
+      ).timeout(const Duration(seconds: 3));
+      return jsonDecode(resp.body);
+    } catch (_) {
+      return null;
     }
   }
 

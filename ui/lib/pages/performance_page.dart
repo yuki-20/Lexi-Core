@@ -46,6 +46,9 @@ class _PerformancePageState extends State<PerformancePage> {
   // Pets
   List<Map<String, dynamic>> _pets = [];
 
+  // Quests
+  List<Map<String, dynamic>> _quests = [];
+
   @override
   void initState() {
     super.initState();
@@ -82,8 +85,13 @@ class _PerformancePageState extends State<PerformancePage> {
           _quizTotal = (quizPerf['total_answers'] as num?)?.toInt() ?? 0;
 
           _pets = List<Map<String, dynamic>>.from(pets);
+
           _loading = false;
         });
+
+        // Load quests (after setState to avoid await-in-setState)
+        final quests = await _engine.getQuests();
+        if (mounted) setState(() => _quests = quests);
       }
     } catch (_) {
       if (mounted) setState(() => _loading = false);
@@ -181,6 +189,105 @@ class _PerformancePageState extends State<PerformancePage> {
            .slideY(begin: 0.04, end: 0),
 
           const SizedBox(height: 20),
+
+          // ── Daily & Weekly Quests ──
+          if (_quests.isNotEmpty) ...[
+            Text('🎯 Quests', style: LiquidGlassTheme.label)
+                .animate().fadeIn(delay: 250.ms),
+            const SizedBox(height: 12),
+            ..._quests.asMap().entries.map((entry) {
+              final i = entry.key;
+              final q = entry.value;
+              final progress = (q['progress'] as num?)?.toInt() ?? 0;
+              final target = (q['target'] as num?)?.toInt() ?? 1;
+              final completed = q['completed'] == true;
+              final xpReward = (q['xp'] as num?)?.toInt() ?? 0;
+              final isDaily = q['type'] == 'daily';
+              final ratio = (progress / target).clamp(0.0, 1.0);
+
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: GlassPanel(
+                  padding: const EdgeInsets.all(14),
+                  child: Row(
+                    children: [
+                      // Quest type badge
+                      Container(
+                        width: 36, height: 36,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(10),
+                          gradient: LinearGradient(colors: [
+                            (completed ? Colors.green : (isDaily ? LiquidGlassTheme.accentPrimary : Colors.amber)).withValues(alpha: 0.2),
+                            (completed ? Colors.green : (isDaily ? LiquidGlassTheme.accentPrimary : Colors.amber)).withValues(alpha: 0.05),
+                          ]),
+                        ),
+                        child: Center(
+                          child: Icon(
+                            completed ? Icons.check_circle_rounded : (isDaily ? Icons.today_rounded : Icons.date_range_rounded),
+                            size: 18,
+                            color: completed ? Colors.green : (isDaily ? LiquidGlassTheme.accentPrimary : Colors.amber),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    q['name']?.toString() ?? 'Quest',
+                                    style: TextStyle(
+                                      fontSize: 13, fontWeight: FontWeight.w600,
+                                      color: completed ? Colors.green : LiquidGlassTheme.textPrimary,
+                                      decoration: completed ? TextDecoration.lineThrough : null,
+                                    ),
+                                  ),
+                                ),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(8),
+                                    color: (completed ? Colors.green : Colors.amber).withValues(alpha: 0.15),
+                                  ),
+                                  child: Text(
+                                    '+$xpReward XP',
+                                    style: TextStyle(
+                                      fontSize: 10, fontWeight: FontWeight.w700,
+                                      color: completed ? Colors.green : Colors.amber,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              '${q['desc'] ?? ''} • $progress/$target',
+                              style: LiquidGlassTheme.bodySmall.copyWith(fontSize: 11, color: LiquidGlassTheme.textMuted),
+                            ),
+                            const SizedBox(height: 6),
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(3),
+                              child: LinearProgressIndicator(
+                                value: ratio,
+                                minHeight: 4,
+                                backgroundColor: Colors.white.withValues(alpha: 0.06),
+                                color: completed ? Colors.green : LiquidGlassTheme.accentPrimary,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ).animate().fadeIn(delay: (280 + i * 60).ms, duration: 400.ms)
+                 .slideY(begin: 0.03, end: 0),
+              );
+            }),
+            const SizedBox(height: 8),
+          ],
 
           // ── Quick Stats Grid (moved from Home) ──
           Row(
@@ -409,6 +516,18 @@ class _PerformancePageState extends State<PerformancePage> {
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                           ),
+                          if (!unlocked && pet['requirement'] != null)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 4),
+                              child: Text(
+                                '🔑 ${pet['requirement']}',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w500,
+                                  color: Colors.amber.withValues(alpha: 0.7),
+                                ),
+                              ),
+                            ),
                         ],
                       ),
                     ),

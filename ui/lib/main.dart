@@ -483,8 +483,7 @@ class _LexiCoreShellState extends State<LexiCoreShell>
     final petEmoji = petEmojis[petId] ?? '🐾';
     final petName = _activePet?['name'] ?? 'No pet yet';
 
-    return ClipRect(
-      child: Container(
+    return Container(
       margin: const EdgeInsets.symmetric(horizontal: 8),
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
@@ -499,44 +498,53 @@ class _LexiCoreShellState extends State<LexiCoreShell>
         ),
         border: Border.all(color: LiquidGlassTheme.glassBorder.withValues(alpha: 0.3)),
       ),
-      child: Column(
-        children: [
-          Text(
-            hasPet ? petEmoji : '🐾',
-            style: const TextStyle(fontSize: 24),
-          ),
-          if (_sidebarExpanded) ...[
-            const SizedBox(height: 6),
-            Text(
-              hasPet ? petName : 'No pet yet',
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-                color: hasPet ? LiquidGlassTheme.textPrimary : LiquidGlassTheme.textMuted,
+      child: LayoutBuilder(
+        builder: (ctx, constraints) {
+          final wide = constraints.maxWidth > 100;
+          return Column(
+            children: [
+              Text(
+                hasPet ? petEmoji : '🐾',
+                style: const TextStyle(fontSize: 24),
               ),
-              overflow: TextOverflow.ellipsis,
-            ),
-            const SizedBox(height: 2),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Icon(Icons.local_fire_department, size: 12, color: Colors.orangeAccent),
-                const SizedBox(width: 3),
+              if (wide) ...[
+                const SizedBox(height: 6),
                 Text(
-                  '$_streakDays day streak',
-                  style: const TextStyle(fontSize: 10, color: Colors.orangeAccent),
+                  hasPet ? petName : 'No pet yet',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: hasPet ? LiquidGlassTheme.textPrimary : LiquidGlassTheme.textMuted,
+                  ),
+                  overflow: TextOverflow.ellipsis,
                 ),
+                const SizedBox(height: 2),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.local_fire_department, size: 12, color: Colors.orangeAccent),
+                    const SizedBox(width: 3),
+                    Flexible(
+                      child: Text(
+                        '$_streakDays day streak',
+                        style: const TextStyle(fontSize: 10, color: Colors.orangeAccent),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              ] else ...[
+                const SizedBox(height: 2),
+                const Icon(Icons.local_fire_department, size: 10, color: Colors.orangeAccent),
               ],
-            ),
-          ] else ...[
-            const SizedBox(height: 2),
-            const Icon(Icons.local_fire_department, size: 10, color: Colors.orangeAccent),
-          ],
-        ],
+            ],
+          );
+        },
       ),
-    ),
     );
   }
+
 }
 
 // ══════════════════════════════════════════════════════════════════

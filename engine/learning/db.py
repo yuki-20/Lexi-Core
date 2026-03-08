@@ -137,6 +137,17 @@ CREATE TABLE IF NOT EXISTS projects (
     created_at  TEXT    NOT NULL DEFAULT (datetime('now'))
 );
 
+-- ── v5.1 — Quest progress ──────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS quest_progress (
+    quest_id    TEXT    NOT NULL,
+    period      TEXT    NOT NULL,              -- 'daily:2026-03-08' or 'weekly:2026-W10'
+    progress    INTEGER NOT NULL DEFAULT 0,
+    completed   INTEGER NOT NULL DEFAULT 0,
+    completed_at TEXT,
+    PRIMARY KEY (quest_id, period)
+);
+
 -- ── Indexes ──────────────────────────────────────────────────────
 
 CREATE INDEX IF NOT EXISTS idx_search_word ON search_history(word);
@@ -705,3 +716,77 @@ class UserDB:
             )
             p["decks"] = [dict(r) for r in cur.fetchall()]
             return p
+
+    # ══════════════════════════════════════════════════════════════════
+    # v5.1 — QUEST SYSTEM
+    # ══════════════════════════════════════════════════════════════════
+
+    QUESTS = {
+        # Daily quests (reset each day)
+        "search_5":  {"name": "Word Explorer",     "desc": "Search for 5 words",       "target": 5,  "xp": 50,  "type": "daily",  "action": "search"},
+        "quiz_1":    {"name": "Quiz Challenger",    "desc": "Complete 1 quiz",          "target": 1,  "xp": 75,  "type": "daily",  "action": "quiz"},
+        "save_3":    {"name": "Collector",          "desc": "Save 3 words",             "target": 3,  "xp": 60,  "type": "daily",  "action": "save"},
+        # Weekly quests (reset each week)
+        "search_20": {"name": "Deep Diver",         "desc": "Search for 20 words",      "target": 20, "xp": 200, "type": "weekly", "action": "search"},
+        "streak_5":  {"name": "Streak Master",      "desc": "Maintain a 5-day streak",  "target": 5,  "xp": 300, "type": "weekly", "action": "streak"},
+        "master_10": {"name": "Knowledge Vault",     "desc": "Master 10 words via quiz", "target": 10, "xp": 500, "type": "weekly", "action": "quiz_correct"},
+    }
+
+    def _quest_period(self, quest_type: str) -> str:
+        from datetime import date
+        today = date.today()
+        if quest_type == "daily":
+            return f"daily:{today.isoformat()}"
+        else:
+            return f"weekly:{today.isocalendar()[0]}-W{today.isocalendar()[1]:02d}"
+
+    def get_quest_progress(self) -> list[dict]:
+        """Get all quests with current progress."""
+        result = []
+        for qid, info in self.QUESTS.items():
+            period = self._quest_period(info["type"])
+            with self._cursor() as cur:
+                cur.execute(
+                    "SELECT progress, completed FROM quest_progress WHERE quest_id = ? AND period = ?",
+                    (qid, period)
+                )
+                row = cur.fetchone()
+                progress = dict(row) if row else {"progress": 0, "completed": 0}
+            result.append({
+                "id": qid,
+                **info,
+                "progress": progress["progress"],
+                "completed": bool(progress["completed"]),
+            })
+        return result
+
+    def increment_quest(self, action: str) -> list[dict]:
+        """Increment progress for all quests matching this action.
+        Returns list of newly completed quests."""
+        newly_completed = []
+        for qid, info in self.QUESTS.items():
+            if info["action"] != action:
+                continue
+            period = self._quest_period(info["type"])
+            with self._cursor() as cur:
+                # Upsert progress
+                cur.execute(
+                    """INSERT INTO quest_progress (quest_id, period, progress, completed)
+                       VALUES (?, ?, 1, 0)
+                       ON CONFLICT(quest_id, period) DO UPDATE
+                       SET progress = MIN(progress + 1, ?)""",
+                    (qid, period, info["target"])
+                )
+                # Check if just completed
+                cur.execute(
+                    "SELECT progress, completed FROM quest_progress WHERE quest_id = ? AND period = ?",
+                    (qid, period)
+                )
+                row = dict(cur.fetchone())
+                if row["progress"] >= info["target"] and not row["completed"]:
+                    cur.execute(
+                        "UPDATE quest_progress SET completed = 1, completed_at = datetime('now') WHERE quest_id = ? AND period = ?",
+                        (qid, period)
+                    )
+                    newly_completed.append({"id": qid, **info})
+        return newly_completed

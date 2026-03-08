@@ -1,6 +1,9 @@
-/// LexiCore — Home Page (v5.0)
+/// LexiCore — Home Page (v5.1)
 /// Personalized welcome text with username, centered search, WOTD only.
-/// Stats moved to Performance tab.
+/// - WOTD uses online mode with 2-hour rotation
+/// - WOTD hidden when user queries a word
+/// - Refresh button to manually rotate WOTD
+/// - Real-time autocomplete on every character typed
 library;
 
 import 'dart:math';
@@ -28,6 +31,7 @@ class _HomePageState extends State<HomePage> {
   bool _isLoading = false;
   bool _isSaved = false;
   String _userName = '';
+  bool _wotdRefreshing = false;
 
   // Personalized welcome messages — {name} will be replaced with username
   static const _welcomeTemplates = [
@@ -53,7 +57,7 @@ class _HomePageState extends State<HomePage> {
 
   Future<void> _loadData() async {
     final profile = await _engine.getProfile();
-    final wotd = await _engine.getWordOfTheDay();
+    final wotd = await _engine.getWordOfTheDay(mode: 'online', hours: 2);
 
     // Award daily login XP
     await _engine.awardXp('daily_login');
@@ -62,6 +66,19 @@ class _HomePageState extends State<HomePage> {
       setState(() {
         _userName = profile['display_name']?.toString() ?? 'Learner';
         _wotd = wotd;
+      });
+    }
+  }
+
+  Future<void> _refreshWotd() async {
+    setState(() => _wotdRefreshing = true);
+    // Use a slightly different hour window to get a new word
+    final rng = Random();
+    final wotd = await _engine.getWordOfTheDay(mode: 'online', hours: 1 + rng.nextInt(3));
+    if (mounted) {
+      setState(() {
+        _wotd = wotd;
+        _wotdRefreshing = false;
       });
     }
   }
@@ -203,8 +220,8 @@ class _HomePageState extends State<HomePage> {
               ),
             ),
 
-          // ── Word of the Day (full width, no stats) ──
-          if (_wotd != null && _wotd!['word'] != null)
+          // ── Word of the Day (hidden when user has queried a word) ──
+          if (!hasResult && _wotd != null && _wotd!['word'] != null)
             ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 700),
               child: GlassPanel(
@@ -215,19 +232,62 @@ class _HomePageState extends State<HomePage> {
                       children: [
                         const Text('✨', style: TextStyle(fontSize: 18)),
                         const SizedBox(width: 8),
-                        Text('Word of the Day',
-                          style: LiquidGlassTheme.label.copyWith(
-                            color: LiquidGlassTheme.accentPrimary,
-                            letterSpacing: 1.0,
+                        Expanded(
+                          child: Text('Word of the Day',
+                            style: LiquidGlassTheme.label.copyWith(
+                              color: LiquidGlassTheme.accentPrimary,
+                              letterSpacing: 1.0,
+                            ),
+                          ),
+                        ),
+                        // Refresh button
+                        GestureDetector(
+                          onTap: _wotdRefreshing ? null : _refreshWotd,
+                          child: AnimatedRotation(
+                            turns: _wotdRefreshing ? 1 : 0,
+                            duration: const Duration(milliseconds: 500),
+                            child: Icon(
+                              Icons.refresh_rounded,
+                              size: 18,
+                              color: _wotdRefreshing
+                                  ? LiquidGlassTheme.textMuted
+                                  : LiquidGlassTheme.accentPrimary.withValues(alpha: 0.7),
+                            ),
                           ),
                         ),
                       ],
                     ),
+                    if (_wotd!['source'] != null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4),
+                        child: Row(
+                          children: [
+                            Icon(
+                              _wotd!['source'] == 'online' ? Icons.cloud_outlined : Icons.storage_outlined,
+                              size: 11,
+                              color: LiquidGlassTheme.textMuted,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              'Rotates every ${_wotd!['rotation_hours'] ?? 2}h',
+                              style: LiquidGlassTheme.bodySmall.copyWith(
+                                fontSize: 10,
+                                color: LiquidGlassTheme.textMuted,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                     const SizedBox(height: 14),
                     GestureDetector(
-                      onTap: () => _onSearch(_wotd!['word']),
+                      onTap: () {
+                        final word = _wotd!['word']?.toString();
+                        if (word != null && word.isNotEmpty) {
+                          _onSearch(word);
+                        }
+                      },
                       child: Text(
-                        _wotd!['word'] ?? '',
+                        _wotd!['word']?.toString() ?? '',
                         style: LiquidGlassTheme.headingSm.copyWith(
                           decoration: TextDecoration.underline,
                           decorationColor: LiquidGlassTheme.accentPrimary.withValues(alpha: 0.4),

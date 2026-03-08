@@ -270,6 +270,24 @@ async def api_autocomplete(
 ):
     t0 = time.perf_counter()
     results = engine.trie.autocomplete(prefix, limit)
+
+    # Online fallback via Datamuse when local results are sparse
+    if len(results) < 5:
+        try:
+            import httpx
+            async with httpx.AsyncClient(timeout=2.0) as client:
+                resp = await client.get(f"https://api.datamuse.com/sug?s={prefix}&max={limit}")
+                if resp.status_code == 200:
+                    online_words = [item["word"] for item in resp.json() if "word" in item]
+                    # Merge without duplicates, local first
+                    existing = set(r["word"] if isinstance(r, dict) else r for r in results)
+                    for w in online_words:
+                        if w.lower() not in existing and len(results) < limit:
+                            results.append({"word": w, "source": "online"})
+                            existing.add(w.lower())
+        except Exception:
+            pass  # Silently fall back to local-only
+
     elapsed = round((time.perf_counter() - t0) * 1000, 3)
     return JSONResponse({
         "prefix": prefix,
@@ -394,19 +412,44 @@ async def api_history(limit: int = Query(50, ge=1, le=200)):
 
 
 @app.get("/api/wotd")
-async def api_word_of_the_day():
-    word = get_word_of_the_day(
-        word_iterator=lambda: engine._all_words,
-        is_learned=lambda w: engine.db.is_saved(w),
-    )
-    if word:
+async def api_word_of_the_day(mode: str = Query("local"), hours: int = Query(2, ge=1, le=12)):
+    """Word of the Day.
+    
+    - mode=local  → pick from local dictionary (2-hour rotation)
+    - mode=online → pick curated word + Cambridge definition
+    """
+    from engine.learning.wotd import get_wotd_for_period, get_curated_wotd
+
+    if mode == "online":
+        word = get_curated_wotd(hours=hours)
+        # Try Cambridge for full definition
+        try:
+            online_def = await lookup_online(word)
+            if online_def:
+                return JSONResponse({"word": word, "definition": online_def, "source": "online", "rotation_hours": hours})
+        except Exception:
+            pass
+        # Fallback to local definition if available
         result = engine.index_store.lookup(word)
         definition = None
         if result:
             offset, length = result
             definition = engine.meaning_store.read_entry(offset, length)
-        return JSONResponse({"word": word, "definition": definition})
-    return JSONResponse({"word": None, "definition": None})
+        return JSONResponse({"word": word, "definition": definition, "source": "curated", "rotation_hours": hours})
+    else:
+        word = get_wotd_for_period(
+            word_iterator=lambda: engine._all_words,
+            is_learned=lambda w: engine.db.is_saved(w),
+            hours=hours,
+        )
+        if word:
+            result = engine.index_store.lookup(word)
+            definition = None
+            if result:
+                offset, length = result
+                definition = engine.meaning_store.read_entry(offset, length)
+            return JSONResponse({"word": word, "definition": definition, "source": "local", "rotation_hours": hours})
+        return JSONResponse({"word": None, "definition": None})
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -680,9 +723,15 @@ async def api_get_all_pets():
     unlocked = {p["pet_id"] for p in engine.db.get_unlocked_pets()}
     pets = []
     for pet_id, info in engine.db.PETS.items():
+        streak_req = info.get("streak_req", 0)
+        req_text = f"Reach {streak_req}-day streak" if streak_req > 0 else "Get 3 perfect quiz scores"
         pets.append({
             "id": pet_id,
-            **info,
+            "name": info["name"],
+            "emoji": info.get("emoji", ""),
+            "description": info.get("desc", ""),
+            "requirement": req_text,
+            "streak_req": streak_req,
             "unlocked": pet_id in unlocked,
         })
     return JSONResponse({"pets": pets})
@@ -926,12 +975,37 @@ async def api_xp_award(req: dict):
     amount = calculate_award(action, streak)
     if amount > 0:
         engine.db.add_exp(amount)
+
+    # Track quest progress
+    quest_action_map = {
+        "search": "search", "save": "save", "quiz": "quiz",
+        "quiz_correct": "quiz_correct", "daily_login": "streak",
+    }
+    quest_action = quest_action_map.get(action, action)
+    completed_quests = engine.db.increment_quest(quest_action)
+
+    # Award bonus XP for completed quests
+    quest_bonus = 0
+    for q in completed_quests:
+        quest_bonus += q.get("xp", 0)
+    if quest_bonus > 0:
+        engine.db.add_exp(quest_bonus)
+
     total_xp = engine.db.get_total_exp()
     return JSONResponse({
         "awarded": amount,
+        "quest_bonus": quest_bonus,
+        "completed_quests": [q["id"] for q in completed_quests],
         "total_xp": total_xp,
         **xp_progress(total_xp),
     })
+
+
+@app.get("/api/quests")
+async def api_get_quests():
+    """Get all quests with current progress."""
+    quests = engine.db.get_quest_progress()
+    return JSONResponse({"quests": quests})
 
 
 # ── Run ───────────────────────────────────────────────────────────────

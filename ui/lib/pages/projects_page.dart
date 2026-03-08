@@ -7,6 +7,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import '../theme/liquid_glass_theme.dart';
 import '../services/engine_service.dart';
 import '../widgets/glass_panel.dart';
+import 'project_detail_page.dart';
 
 class ProjectsPage extends StatefulWidget {
   const ProjectsPage({super.key});
@@ -295,7 +296,17 @@ class _ProjectsPageState extends State<ProjectsPage> {
               final color = _parseColor(project['color'] ?? '#7C4DFF');
               return Padding(
                 padding: const EdgeInsets.only(bottom: 16),
-                child: GlassPanel(
+                child: GestureDetector(
+                  onTap: () {
+                    Navigator.push(context, MaterialPageRoute(
+                      builder: (_) => ProjectDetailPage(
+                        projectId: project['id'],
+                        projectName: project['name'] ?? 'Untitled',
+                        projectColor: color,
+                      ),
+                    )).then((_) => _loadProjects());
+                  },
+                  child: GlassPanel(
                   padding: const EdgeInsets.all(20),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -376,6 +387,7 @@ class _ProjectsPageState extends State<ProjectsPage> {
                         ],
                       ),
                     ],
+                  ),
                   ),
                 ).animate()
                  .fadeIn(delay: Duration(milliseconds: 150 * entry.key), duration: 400.ms)
