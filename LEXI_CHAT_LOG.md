@@ -79,7 +79,7 @@ The Lexi-Core folder was empty. I set everything up — initialized Git, created
 | Step | Status |
 |---|---|
 | `git init` | ✅ |
-| Git identity → `yuki-20` / `saoyui779@gmail.com` | ✅ |
+| Git identity → `yuki-20` / `############` | ✅ |
 | Created `LEXI_CHAT_LOG.md` (first session logged) | ✅ |
 | Created `.gitignore` | ✅ |
 | Initial commit — `chore: initialize Lexi-Core` | ✅ |
