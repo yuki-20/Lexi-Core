@@ -1584,3 +1584,342 @@ To https://github.com/yuki-20/Lexi-Core.git
 ```
 
 ---
+
+## Session — 2026-03-09 00:40
+
+### 🧑 Prompt
+
+> Improve the digest and the quiz error showing meaning
+
+### 🤖 Response
+
+**Step 1: Root cause analysis of quiz definitions**
+
+Found 3 issues causing empty quiz answers:
+
+1. `generate_quiz()` in `engine/learning/db.py` (line 497–529) included words with empty `definition=""` as quiz questions, producing blank correct answers and empty explanations like `'cabin' means: `
+2. `GET /api/quiz/generate` in `engine/main.py` (line 679–697) passed saved words with null definitions — it only used `get_definition_dict()` (local binary dictionary) which returned null for most words
+3. `POST /api/quiz/generate` had the same issue
+
+**Step 2: Fixed `generate_quiz()` in `engine/learning/db.py`**
+
+```python
+# Before: no filtering, empty definitions passed through
+correct = item.get("definition", "")
+
+# After: filter to only words with actual definitions
+valid_words = [w for w in words if w.get("definition") and w["definition"].strip()]
+if len(valid_words) < 4:
+    return []
+# Also added: skip questions without 3 wrong answers
+if len(wrong) < 3:
+    continue
+```
+
+**Step 3: Fixed GET `/api/quiz/generate` in `engine/main.py`**
+
+Added auto-digest loop that uses `lookup_online()` (dictionaryapi.dev) as fallback for words without definitions, saves results to DB:
+
+```python
+for w in words:
+    if not w.get("definition") or not w["definition"].strip():
+        defn = engine.get_definition_dict(w["word"])
+        if defn and defn.get("definitions"):
+            w["definition"] = defs[0]
+        else:
+            online = await lookup_online(w["word"])
+            if online and online.get("definitions"):
+                w["definition"] = defs[0]
+                engine.db.save_word(w["word"], definition=w["definition"])
+```
+
+**Step 4: Verified quiz definitions working**
+
+```powershell
+Invoke-WebRequest -Uri "http://127.0.0.1:8741/api/quiz/generate?count=3"
+```
+
+Result:
+- rabbit: "A mammal of the family Leporidae, with long ears, long hind..."
+- pollen: "A fine granular substance produced in flowers. Technically a..."
+- candle: "A light source consisting of a wick embedded in a solid, fla..."
+
+All quiz questions now have proper, meaningful definitions. ✅
+
+---
+
+### 🧑 Follow-up Prompt
+
+> Add function where user can save their saved word into dictionary, add performance analyze when user finish doing quiz, save user past quiz and make a chart overtime at that quiz tab so the user can see how they improve over time. Fix the bug when user save a word that user query and user can't un-save that word. Optimize the level part as they are leveling way too fast (max level is 1000, each 5 level for the first 30 level u will get a new title, and after that will be 10 level, the last will be until u reach 1000 special title)
+
+### 🤖 Response
+
+**Step 1: XP & Leveling v2 — Complete rewrite of `engine/learning/xp_engine.py`**
+
+Changed from level^1.5 to level^2.0 formula with base 150 (much slower progression):
+
+| Before | After |
+|--------|-------|
+| `100 × level^1.5` | `150 × level^2.0` |
+| Max level ~50 | Max level 1000 |
+| 10 titles | 20 titles |
+| +5 XP/search | +3 XP/search |
+| +25 XP/quiz correct | +10 XP/quiz correct |
+| 2.0× max streak | 1.6× max streak |
+
+20 titles from "Novice" (Lv 1) → "Word Sprout" (5) → ... → "Grand Lexicographer" (500) → "Word Titan" (750) → "∞ Eternal Lexicon" (1000).
+
+**Step 2: Fix unsave bug — `ui/lib/pages/home_page.dart`**
+
+Replaced one-way `_onSaveWord` with `_onToggleSave`:
+
+```dart
+Future<void> _onToggleSave() async {
+    if (_isSaved) {
+      final ok = await _engine.deleteSavedWord(_result!.word);
+      if (ok && mounted) setState(() => _isSaved = false);
+    } else {
+      final ok = await _engine.saveWord(_result!.word, ...);
+      if (ok) { await _engine.awardXp('save'); setState(() => _isSaved = true); }
+    }
+}
+```
+
+Also added saved state check on search — queries saved words list to show correct bookmark state:
+
+```dart
+final savedWords = await _engine.getSavedWords();
+alreadySaved = savedWords.any((w) => w['word']?.toLowerCase() == query.trim().toLowerCase());
+```
+
+**Step 3: Quiz performance analytics — `ui/lib/pages/quiz_page.dart`**
+
+Rewrote `_buildResult()` with:
+- Score card with color-coded percentage (green ≥70%, orange ≥50%, red <50%)
+- 3 stat cards: Time (`_timer.elapsed`), Avg/Question, Accuracy %
+- Per-question breakdown with ✅/❌ icons and "Your answer:" for wrong ones
+- "History" button linking to new `'history'` state
+
+**Step 4: Quiz history chart — New `_buildHistory()` + `_QuizChartPainter`**
+
+- `_buildHistory()` — FutureBuilder loading from `_engine.getQuizHistory()`
+- `_QuizChartPainter` — CustomPainter drawing line chart with gradient fill, data points, grid lines
+- Stats row: Best Score, Total Quizzes, Average
+- Recent quizzes list with score badges and mini progress bars
+
+**Step 5: Added `_StatCard` widget for consistent stat display**
+
+**Step 6: Hot restart** — `Restarted application in 462ms` ✅ Zero errors
+
+---
+
+### 🧑 Follow-up Prompt
+
+> fix the error where the quiz history is not saved
+
+### 🤖 Response
+
+**Step 1: Tested quiz submit endpoint**
+
+```powershell
+Invoke-RestMethod -Uri "http://127.0.0.1:8741/api/quiz/submit" -Method POST ...
+# Result: Internal Server Error (500)
+```
+
+**Step 2: Captured backend traceback** (ran backend with visible output)
+
+```
+File "engine/main.py", line 769, in api_submit_quiz
+    quiz_id = engine.db.create_quiz_result(...)
+File "engine/learning/db.py", line 455, in create_quiz_result
+    self.add_exp(exp, words_learned=correct)
+File "engine/learning/db.py", line 303, in add_exp
+    cur.execute("INSERT INTO streaks ...")
+sqlite3.OperationalError: database is locked
+```
+
+**Step 3: Root cause — Nested cursor deadlock**
+
+`create_quiz_result()` at line 446 opens cursor #1 (uncommitted), then calls `self.add_exp()` at line 456 which opens cursor #2 (new connection). SQLite WAL can't handle concurrent writes from the same process → deadlock.
+
+**Step 4: Fix — Inlined `add_exp` SQL into `create_quiz_result()` in `engine/learning/db.py`**
+
+```python
+# Before: self.add_exp(exp, words_learned=correct)  # Opens 2nd connection → DEADLOCK
+
+# After: inline the SQL on the same cursor
+today = date.today().isoformat()
+cur.execute(
+    "INSERT INTO streaks (date_key, words_learned, exp_earned) "
+    "VALUES (?, ?, ?) ON CONFLICT(date_key) DO UPDATE SET "
+    "words_learned = words_learned + excluded.words_learned, "
+    "exp_earned = exp_earned + excluded.exp_earned",
+    (today, correct, exp),
+)
+```
+
+Also added safety net: `sqlite3.connect(str(self.path), timeout=30)` and `PRAGMA busy_timeout=30000`.
+
+**Step 5: Verified fix**
+
+```powershell
+Invoke-RestMethod -Uri "http://127.0.0.1:8741/api/quiz/submit" -Method POST ...
+# Result: {"quiz_id": 1, "correct": 1, "total": 2, "score_pct": 50.0}  ✅
+
+Invoke-RestMethod -Uri "http://127.0.0.1:8741/api/quiz/history?limit=5"
+# Result: {"history": [{"id": 1, "total_q": 2, "correct": 1, "score_pct": 50.0, "duration_s": 25.3}]}  ✅
+```
+
+---
+
+### 🧑 Follow-up Prompt
+
+> I need when the user input smt like this, there will be real time suggestion
+
+### 🤖 Response
+
+**Step 1: Found the bug** — `_onSearchChanged` in `home_page.dart` line 117 required `value.length < 2` to trigger autocomplete. Typing 1 character ("H") returned empty suggestions.
+
+**Step 2: Fix** — Changed threshold from 2 to 1 character:
+
+```dart
+// Before
+if (value.length < 2) { setState(() => _suggestions = []); return; }
+
+// After
+if (value.isEmpty) { setState(() => _suggestions = []); return; }
+```
+
+Hot restart: `Restarted application in 334ms` ✅
+
+---
+
+### 🧑 Follow-up Prompt
+
+> I still don't see the option to add saved words to dictionary
+
+### 🤖 Response
+
+**Step 1: Added backend endpoint** — `POST /api/dictionary/add-saved` in `engine/main.py` (line 1653):
+
+```python
+@app.post("/api/dictionary/add-saved")
+async def api_add_saved_to_dictionary():
+    saved = engine.db.get_saved_words()
+    digested = [w for w in saved if w.get("definition") and w["definition"].strip()]
+    for w in digested:
+        word = w["word"].strip().lower()
+        if word and word not in existing:
+            engine._all_words.append(word)
+```
+
+**Step 2: Added service method** — `addSavedToDictionary()` in `engine_service.dart`
+
+**Step 3: Added UI button** — 📖 "Dict" button in saved words page header with `_addToDictionary()` method showing SnackBar "Added X words to dictionary!"
+
+---
+
+### 🧑 Follow-up Prompt
+
+> fix the dictionary is not showing words saved from saved word
+
+### 🤖 Response
+
+**Step 1: Found bug** — `engine._all_words` is a `list[str]` but the endpoint used `.add()` (set method). Error: `AttributeError: 'list' object has no attribute 'add'` → 500 Internal Server Error.
+
+**Step 2: Fix** — Changed `.add()` to `.append()` and added `set()` for O(1) membership checks:
+
+```python
+existing = set(engine._all_words)
+if word and word not in existing:
+    engine._all_words.append(word)
+    existing.add(word)
+```
+
+**Step 3: Verified** — `{"added": 116, "total_dictionary": 136}` ✅
+
+---
+
+### 🧑 Follow-up Prompt
+
+> Fix dictionary not showing the word meaning
+
+### 🤖 Response
+
+**Step 1: Root cause** — Dictionary page `_expandWord()` called `_engine.lookupWord(word)` which only checks the local binary dictionary. Saved words (added via online lookup) have definitions in SQLite, not the binary index.
+
+**Step 2: Fix** — Added 3-tier definition fallback in `dictionary_page.dart`:
+
+```dart
+// 1. Try local binary dictionary
+Map<String, dynamic>? result = await _engine.lookupWord(word);
+// 2. Fallback: try full search (includes online)
+if (result == null) {
+    final searchResult = await _engine.searchExact(word);
+    if (searchResult.found) result = {...};
+}
+// 3. Fallback: check saved words SQLite
+if (result == null) {
+    final saved = await _engine.getSavedWords();
+    final match = saved.firstWhere(...);
+    if (match['definition'] != null) result = {...};
+}
+```
+
+Build: `√ Built build\windows\x64\runner\Debug\lexicore_ui.exe` ✅
+
+---
+
+### 🧑 Follow-up Prompt
+
+> Okay now update everything github (details and modify everything to match the latest version even the road map) + details log for everything
+
+### 🤖 Response
+
+**Step 1: Updated `README.md`** — v5.4 → v5.5
+
+- Updated all feature descriptions (quiz analytics, save/unsave, dictionary integration, XP v2)
+- Updated architecture tree (1800+ lines, 70+ endpoints, new widgets)
+- Added Dictionary Browser and Saved Digest API endpoints
+- New ⚡ XP & Leveling System v2 section with full title/XP table
+- Updated roadmap v5.5 entry, added 3 new planned features
+- Updated tech stack (SQLite WAL, dictionaryapi.dev, audioplayers)
+
+**Step 2: Created `CHANGELOG.md`** — Comprehensive changelog v1.0–v5.5
+
+**Step 3: Git commit and push**
+
+```powershell
+git add -A
+git commit -m "v5.5: Quiz analytics, history chart, save/unsave toggle, dictionary integration, XP v2 rebalance"
+# [main 3ea2827] 20 files changed, 2466 insertions(+), 273 deletions(-)
+
+git pull --rebase origin main
+# Successfully rebased and updated refs/heads/main
+
+git push origin main
+# bc5b6a8..2bec53f  main -> main  ✅
+```
+
+---
+
+### 🧑 Follow-up Prompt
+
+> Chatlog also
+
+### 🤖 Response
+
+Appended full session log to `LEXI_CHAT_LOG.md` with all prompts and responses, including:
+- Quiz definition quality fixes
+- XP v2 rebalance
+- Save/unsave toggle fix
+- Quiz analytics and history chart
+- SQLite deadlock fix
+- Autocomplete instant trigger
+- Dictionary add-saved endpoint
+- Dictionary definition fallback
+- README v5.5 and CHANGELOG.md
+
+Committed and pushed to GitHub.
+
+---
