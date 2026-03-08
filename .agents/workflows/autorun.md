@@ -17,11 +17,11 @@ This workflow auto-starts both the Python backend and the Flutter desktop app.
 Get-NetTCPConnection -LocalPort 8741 -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess | ForEach-Object { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue }
 ```
 
-2. Start the backend (run as background command, wait max 6s for startup output):
+2. Start the backend **with hidden window** (no PowerShell popup):
 ```powershell
-python -m engine.main
+Start-Process -FilePath "python" -ArgumentList "-m engine.main" -WorkingDirectory "c:\Users\Yuki\Documents\Lexi-Core" -WindowStyle Hidden
 ```
-Run this from `c:\Users\Yuki\Documents\Lexi-Core`. Use `WaitMsBeforeAsync: 6000` so it goes to background after confirming startup.
+Run this from `c:\Users\Yuki\Documents\Lexi-Core`. Use `WaitMsBeforeAsync: 4000` so it goes to background. Then wait ~3s for the server to be ready.
 
 3. Launch the Flutter app:
 ```powershell
@@ -34,9 +34,9 @@ Run this from `c:\Users\Yuki\Documents\Lexi-Core\ui`. Use `WaitMsBeforeAsync: 50
 ## Backend Restart Rules
 
 When you need to restart the backend during development:
-- **DO:** Terminate the running command immediately (`Terminate: true`), then kill port 8741, then start fresh
+- **DO:** Kill port 8741 first, then start the backend with `-WindowStyle Hidden` to avoid popup
+- **DO NOT:** Use `Start-Process powershell` which creates a visible window
 - **DO NOT:** Try to send `Ctrl+C` or wait for graceful shutdown
-- **DO NOT:** Wait for terminal output after terminating — just move on and start new
 
 ## Notes
 - The backend runs on `http://127.0.0.1:8741`

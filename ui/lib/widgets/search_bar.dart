@@ -36,6 +36,9 @@ class _SearchBarState extends State<SearchBar> {
     _focusNode.addListener(() {
       setState(() => _isFocused = _focusNode.hasFocus);
     });
+    _controller.addListener(() {
+      setState(() {}); // Rebuild for clear button visibility
+    });
   }
 
   @override

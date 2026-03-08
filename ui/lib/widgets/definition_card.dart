@@ -1,14 +1,16 @@
 /// LexiCore — Definition Card Widget
-/// Glass panel displaying word definition with POS pills and performance metrics.
+/// Glass panel displaying word definition with POS pills, performance metrics,
+/// and audio pronunciation button.
 library;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:audioplayers/audioplayers.dart';
 import '../theme/liquid_glass_theme.dart';
 import '../widgets/glass_panel.dart';
 import '../services/engine_service.dart';
 
-class DefinitionCard extends StatelessWidget {
+class DefinitionCard extends StatefulWidget {
   final SearchResult result;
   final VoidCallback? onSave;
   final bool isSaved;
@@ -21,14 +23,43 @@ class DefinitionCard extends StatelessWidget {
   });
 
   @override
+  State<DefinitionCard> createState() => _DefinitionCardState();
+}
+
+class _DefinitionCardState extends State<DefinitionCard> {
+  final AudioPlayer _audioPlayer = AudioPlayer();
+  bool _isPlaying = false;
+
+  @override
+  void dispose() {
+    _audioPlayer.dispose();
+    super.dispose();
+  }
+
+  Future<void> _playAudio() async {
+    if (_isPlaying) return;
+    setState(() => _isPlaying = true);
+    try {
+      final url = 'http://127.0.0.1:8741/api/tts/${Uri.encodeComponent(widget.result.word)}';
+      await _audioPlayer.play(UrlSource(url));
+      _audioPlayer.onPlayerComplete.listen((_) {
+        if (mounted) setState(() => _isPlaying = false);
+      });
+    } catch (_) {
+      if (mounted) setState(() => _isPlaying = false);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final result = widget.result;
     return GlassPanel(
       padding: const EdgeInsets.all(24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          // ── Word + Save Button ──
+          // ── Word + Audio + Save Button ──
           Row(
             children: [
               Expanded(
@@ -39,7 +70,42 @@ class DefinitionCard extends StatelessWidget {
                   ),
                 ),
               ),
-              _SaveButton(onTap: onSave, isSaved: isSaved),
+              // Audio pronunciation button
+              GestureDetector(
+                onTap: _playAudio,
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  width: 36, height: 36,
+                  margin: const EdgeInsets.only(right: 8),
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: _isPlaying
+                        ? LiquidGlassTheme.accentPrimary.withValues(alpha: 0.2)
+                        : Colors.white.withValues(alpha: 0.06),
+                    border: Border.all(
+                      color: _isPlaying
+                          ? LiquidGlassTheme.accentPrimary.withValues(alpha: 0.4)
+                          : LiquidGlassTheme.glassBorder,
+                    ),
+                  ),
+                  child: Center(
+                    child: _isPlaying
+                        ? SizedBox(
+                            width: 14, height: 14,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: LiquidGlassTheme.accentPrimary,
+                            ),
+                          )
+                        : Icon(
+                            Icons.volume_up_rounded,
+                            size: 18,
+                            color: LiquidGlassTheme.accentPrimary,
+                          ),
+                  ),
+                ),
+              ),
+              _SaveButton(onTap: widget.onSave, isSaved: widget.isSaved),
             ],
           ),
           const SizedBox(height: 8),

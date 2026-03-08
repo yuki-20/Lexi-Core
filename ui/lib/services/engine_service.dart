@@ -314,6 +314,20 @@ class EngineService {
     }
   }
 
+  Future<Map<String, dynamic>?> generateQuizFromWords(
+      List<String> words, {int count = 10}) async {
+    try {
+      final resp = await http.post(
+        Uri.parse('$_baseUrl/api/quiz/generate'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'words': words, 'count': count}),
+      ).timeout(const Duration(seconds: 30)); // longer timeout for online lookups
+      return jsonDecode(resp.body);
+    } catch (_) {
+      return null;
+    }
+  }
+
   Future<Map<String, dynamic>?> submitQuiz({
     int? deckId,
     required List<Map<String, dynamic>> answers,
@@ -734,6 +748,85 @@ class EngineService {
       await http.delete(Uri.parse('$_baseUrl/api/ai/history/$convId'))
           .timeout(const Duration(seconds: 3));
     } catch (_) {}
+  }
+
+  Future<Map<String, dynamic>?> lookupWord(String word) async {
+    try {
+      final resp = await http.get(Uri.parse('$_baseUrl/api/search/${Uri.encodeComponent(word)}'))
+          .timeout(const Duration(seconds: 5));
+      final data = jsonDecode(resp.body);
+      if (data['found'] == true) return data;
+      return null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<int> deleteAllAiConversations() async {
+    try {
+      final resp = await http.delete(Uri.parse('$_baseUrl/api/ai/history'))
+          .timeout(const Duration(seconds: 5));
+      final data = jsonDecode(resp.body);
+      return data['deleted'] as int? ?? 0;
+    } catch (_) {
+      return 0;
+    }
+  }
+
+
+  Future<Map<String, dynamic>> getDictionaryWords({String letter = '', int page = 1, int limit = 100}) async {
+    try {
+      final resp = await http.get(
+        Uri.parse('$_baseUrl/api/dictionary/words?letter=$letter&page=$page&limit=$limit'),
+      ).timeout(const Duration(seconds: 5));
+      return jsonDecode(resp.body);
+    } catch (_) {
+      return {'words': [], 'total': 0, 'page': 1, 'pages': 0};
+    }
+  }
+
+  Future<Map<String, dynamic>> addSavedToDictionary() async {
+    try {
+      final resp = await http.post(
+        Uri.parse('$_baseUrl/api/dictionary/add-saved'),
+      ).timeout(const Duration(seconds: 10));
+      return jsonDecode(resp.body);
+    } catch (_) {
+      return {'added': 0, 'message': 'Failed to add words'};
+    }
+  }
+
+  Future<Map<String, dynamic>> getDictionaryLetters() async {
+    try {
+      final resp = await http.get(Uri.parse('$_baseUrl/api/dictionary/letters'))
+          .timeout(const Duration(seconds: 5));
+      return jsonDecode(resp.body);
+    } catch (_) {
+      return {'letters': {}, 'total': 0};
+    }
+  }
+
+  Stream<Map<String, dynamic>> importFileWithProgress(String filePath, {bool searchOnline = true}) async* {
+    final client = http.Client();
+    try {
+      var request = http.MultipartRequest(
+        'POST',
+        Uri.parse('$_baseUrl/api/import/file/stream?search_online=$searchOnline'),
+      );
+      request.files.add(await http.MultipartFile.fromPath('file', filePath));
+      final response = await client.send(request).timeout(const Duration(minutes: 5));
+      final stream = response.stream.transform(utf8.decoder).transform(const LineSplitter());
+      await for (final line in stream) {
+        if (line.startsWith('data: ')) {
+          try {
+            final data = jsonDecode(line.substring(6));
+            yield data;
+          } catch (_) {}
+        }
+      }
+    } finally {
+      client.close();
+    }
   }
 
   /// Stream AI chat via SSE — yields events {type, content} in real-time.

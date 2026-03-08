@@ -180,9 +180,10 @@ class UserDB:
     # ── Connection ────────────────────────────────────────────────────
 
     def _connect(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(str(self.path))
+        conn = sqlite3.connect(str(self.path), timeout=30)
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA busy_timeout=30000")
         conn.execute("PRAGMA foreign_keys=ON")
         return conn
 
@@ -448,11 +449,19 @@ class UserDB:
                 "VALUES (?, ?, ?, ?, ?)",
                 (deck_id, total_q, correct, score_pct, duration_s),
             )
-            # Award EXP: 10 per correct + bonus for perfect
+            # Award EXP inline (avoid nested cursor deadlock)
             exp = correct * 10
             if score_pct >= 100.0:
                 exp += 50  # perfect bonus
-            self.add_exp(exp, words_learned=correct)
+            today = date.today().isoformat()
+            cur.execute(
+                "INSERT INTO streaks (date_key, words_learned, exp_earned) "
+                "VALUES (?, ?, ?) "
+                "ON CONFLICT(date_key) DO UPDATE SET "
+                "words_learned = words_learned + excluded.words_learned, "
+                "exp_earned = exp_earned + excluded.exp_earned",
+                (today, correct, exp),
+            )
             return cur.lastrowid  # type: ignore
 
     def add_quiz_answer(self, quiz_id: int, word: str,
@@ -499,21 +508,28 @@ class UserDB:
 
         Each item: {word, correct_answer, correct_index, options: [4 choices], explanation}
         """
-        if len(words) < 4:
+        # Filter to only words that have actual definitions
+        valid_words = [w for w in words if w.get("definition") and w["definition"].strip()]
+
+        if len(valid_words) < 4:
             return []
 
-        random.shuffle(words)
-        selected = words[:count]
+        random.shuffle(valid_words)
+        selected = valid_words[:count]
         questions = []
 
         for item in selected:
             word = item["word"]
-            correct = item.get("definition", "")
+            correct = item["definition"].strip()
 
-            # Pick 3 wrong answers from other words
-            others = [w for w in words if w["word"] != word and w.get("definition")]
+            # Pick 3 wrong answers from other words with definitions
+            others = [w for w in valid_words if w["word"] != word and w.get("definition") and w["definition"].strip()]
             random.shuffle(others)
-            wrong = [o.get("definition", "") for o in others[:3]]
+            wrong = [o["definition"].strip() for o in others[:3]]
+
+            # Need at least 3 wrong answers for 4 options
+            if len(wrong) < 3:
+                continue
 
             options = wrong + [correct]
             random.shuffle(options)
@@ -877,3 +893,9 @@ class UserDB:
         with self._cursor() as cur:
             cur.execute("DELETE FROM ai_conversations WHERE id = ?", (conv_id,))
             return cur.rowcount > 0
+
+    def delete_all_ai_conversations(self) -> int:
+        """Delete all AI conversations. Returns count deleted."""
+        with self._cursor() as cur:
+            cur.execute("DELETE FROM ai_conversations")
+            return cur.rowcount

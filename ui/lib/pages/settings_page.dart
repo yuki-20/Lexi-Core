@@ -31,6 +31,8 @@ class _SettingsPageState extends State<SettingsPage> {
   // Learning preferences
   int _dailyGoal = 10;  // words per day
   bool _notificationsEnabled = true;
+  String _customInstructions = '';
+  final _instructionsController = TextEditingController();
 
   // Theme cover color
   Color _coverColor = LiquidGlassTheme.accentPrimary;
@@ -61,6 +63,8 @@ class _SettingsPageState extends State<SettingsPage> {
         if (_coverPath != null && _coverPath!.isEmpty) _coverPath = null;
         _dailyGoal = int.tryParse(profile['daily_goal']?.toString() ?? '') ?? 10;
         _notificationsEnabled = profile['notifications'] != 'false';
+        _customInstructions = profile['custom_instructions']?.toString() ?? '';
+        _instructionsController.text = _customInstructions;
         // Restore accent color
         final colorHex = profile['cover_color']?.toString();
         if (colorHex != null && colorHex.isNotEmpty) {
@@ -129,6 +133,7 @@ class _SettingsPageState extends State<SettingsPage> {
   @override
   void dispose() {
     _nameController.dispose();
+    _instructionsController.dispose();
     super.dispose();
   }
 
@@ -347,6 +352,67 @@ class _SettingsPageState extends State<SettingsPage> {
 
           const SizedBox(height: 32),
 
+          // ── Custom AI Instructions ──
+          Text('CUSTOM AI INSTRUCTIONS', style: LiquidGlassTheme.label)
+              .animate().fadeIn(delay: 820.ms),
+          const SizedBox(height: 6),
+          Text(
+            'Tell Lexi AI how you want it to behave. These instructions are added to every conversation.',
+            style: LiquidGlassTheme.bodySmall.copyWith(color: LiquidGlassTheme.textMuted, fontSize: 11),
+          ).animate().fadeIn(delay: 830.ms),
+          const SizedBox(height: 10),
+          GlassPanel(
+            padding: const EdgeInsets.all(14),
+            child: Column(
+              children: [
+                TextField(
+                  controller: _instructionsController,
+                  style: LiquidGlassTheme.body.copyWith(
+                    color: LiquidGlassTheme.textPrimary, fontSize: 13, height: 1.5,
+                  ),
+                  maxLines: 6,
+                  minLines: 3,
+                  decoration: InputDecoration(
+                    hintText: 'e.g. Always respond in Vietnamese. Focus on IELTS vocabulary. Keep answers short and concise.',
+                    hintStyle: LiquidGlassTheme.body.copyWith(
+                      color: Colors.white.withValues(alpha: 0.2), fontSize: 12,
+                    ),
+                    border: InputBorder.none,
+                    contentPadding: EdgeInsets.zero,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: GestureDetector(
+                    onTap: () async {
+                      final text = _instructionsController.text.trim();
+                      await _engine.updateProfile('custom_instructions', text);
+                      setState(() => _customInstructions = text);
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Custom instructions saved!')),
+                        );
+                      }
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(10),
+                        color: LiquidGlassTheme.accentPrimary.withValues(alpha: 0.15),
+                      ),
+                      child: Text('Save', style: LiquidGlassTheme.label.copyWith(
+                        color: LiquidGlassTheme.accentPrimary,
+                      )),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ).animate().fadeIn(delay: 850.ms),
+
+          const SizedBox(height: 32),
+
           // ── Data Management ──
           Text('DATA', style: LiquidGlassTheme.label)
               .animate().fadeIn(delay: 850.ms),
@@ -421,10 +487,15 @@ class _SettingsPageState extends State<SettingsPage> {
             child: Column(
               children: [
                 _InfoRow(label: 'App', value: 'LexiCore Engine'),
-                _InfoRow(label: 'Version', value: '5.2.0'),
+                _InfoRow(label: 'Version', value: '5.5.0'),
                 _InfoRow(label: 'UI Engine', value: 'Flutter + Liquid Glass'),
                 _InfoRow(label: 'Backend', value: 'Python FastAPI'),
                 _InfoRow(label: 'Design', value: 'iOS 26 Liquid Glass'),
+                _InfoRow(label: 'AI Models', value: 'DeepSeek R1, Gemma 3, Llama 4'),
+                _InfoRow(label: 'Features', value: 'Dictionary, Quiz, Flashcards, AI'),
+                _InfoRow(label: 'Audio', value: 'Google TTS Pronunciation'),
+                _InfoRow(label: 'Web Search', value: 'DuckDuckGo RAG'),
+                _InfoRow(label: 'Storage', value: 'SQLite + Custom Binary Index'),
               ],
             ),
           ).animate().fadeIn(delay: 1000.ms),

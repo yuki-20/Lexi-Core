@@ -19,6 +19,7 @@ import 'pages/performance_page.dart';
 import 'pages/settings_page.dart';
 import 'pages/projects_page.dart';
 import 'pages/lexi_ai_page.dart';
+import 'pages/dictionary_page.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -141,6 +142,7 @@ class _LexiCoreShellState extends State<LexiCoreShell>
     _NavItem(Icons.style_rounded, 'Flashcards'),
     _NavItem(Icons.quiz_rounded, 'Quiz'),
     _NavItem(Icons.bookmark_rounded, 'Saved Words'),
+    _NavItem(Icons.menu_book_rounded, 'Dictionary'),
     _NavItem(Icons.analytics_rounded, 'Performance'),
     _NavItem(Icons.smart_toy_rounded, 'Lexi AI'),
     _NavItem(Icons.settings_rounded, 'Settings'),
@@ -152,6 +154,7 @@ class _LexiCoreShellState extends State<LexiCoreShell>
     FlashcardsPage(),
     QuizPage(),
     SavedWordsPage(),
+    DictionaryPage(),
     PerformancePage(),
     LexiAiPage(),
     SettingsPage(),
@@ -443,7 +446,7 @@ class _LexiCoreShellState extends State<LexiCoreShell>
                         color: isActive ? LiquidGlassTheme.accentPrimary : Colors.transparent,
                       ),
                     ),
-                    index == 6
+                    index == 7
                         ? Image.asset('assets/images/lexi_ai_icon.gif',
                             width: 20, height: 20)
                         : Icon(item.icon, size: 20,
@@ -468,7 +471,7 @@ class _LexiCoreShellState extends State<LexiCoreShell>
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      index == 6
+                      index == 7
                           ? Image.asset('assets/images/lexi_ai_icon.gif',
                               width: 20, height: 20)
                           : Icon(item.icon, size: 20,

@@ -1,27 +1,42 @@
 """
-LexiCore — XP & Leveling Engine
-================================
+LexiCore — XP & Leveling Engine (v5.5)
+========================================
 Polynomial level curve with streak multipliers and word mastery badges.
 
-Level formula: XP_required = floor(100 × level^1.5)
-  Level 1:    100 XP     Level 5:   1,118 XP
-  Level 10:  3,162 XP    Level 20:  8,944 XP
-  Level 50: 35,355 XP    Level 100: 100,000 XP
+Level formula: XP_required = floor(150 × level^2.0)
+  Level 1:      0 XP     Level 5:   3,750 XP
+  Level 10: 15,000 XP    Level 20:  60,000 XP
+  Level 50: 375,000 XP   Level 100: 1,500,000 XP
+  Level 500: 37,500,000  Level 1000: 150,000,000
+
+Max level: 1000
+
+Titles (every 5 levels first 30, then every 10, special at 1000):
+  Level 1:   Novice             Level 5:   Word Sprout
+  Level 10:  Curious Learner    Level 15:  Word Explorer
+  Level 20:  Rising Wordsmith   Level 25:  Skilled Linguist
+  Level 30:  Word Connoisseur   Level 40:  Language Scholar
+  Level 50:  Vocabulary Artisan Level 60:  Lexicon Guardian
+  Level 70:  Word Architect     Level 80:  Syntax Sage
+  Level 90:  Polyglot Herald    Level 100: Vocabulary Master
+  Level 150: Dictionary Knight  Level 200: Eloquence Lord
+  Level 300: Linguistic Emperor Level 500: Grand Lexicographer
+  Level 750: Word Titan         Level 1000: ∞ Eternal Lexicon
 
 XP Awards:
-  - Search a word:             +5 XP
-  - Save a word:              +10 XP
-  - Quiz correct answer:      +25 XP
-  - Quiz 100% bonus:         +100 XP
-  - Daily login:              +15 XP
-  - Flashcard review:         +10 XP
-  - Complete flashcard deck:  +50 XP
+  - Search a word:             +3 XP
+  - Save a word:               +5 XP
+  - Quiz correct answer:      +10 XP
+  - Quiz 100% bonus:          +50 XP
+  - Daily login:              +10 XP
+  - Flashcard review:          +5 XP
+  - Complete flashcard deck:  +25 XP
 
 Streak multipliers:
-  - 2+ days:  1.2×
-  - 7+ days:  1.5×
-  - 14+ days: 1.8×
-  - 30+ days: 2.0×
+  - 2+ days:  1.1×
+  - 7+ days:  1.25×
+  - 14+ days: 1.4×
+  - 30+ days: 1.6×
 
 Word mastery (per word, based on quiz correct count):
   - Bronze:  3+ correct
@@ -37,17 +52,19 @@ from typing import Any
 
 # ── XP thresholds ──
 
+MAX_LEVEL = 1000
+
 def xp_for_level(level: int) -> int:
     """Total XP required to reach this level."""
     if level <= 1:
         return 0
-    return math.floor(100 * (level ** 1.5))
+    return math.floor(150 * (level ** 2.0))
 
 
 def level_from_xp(total_xp: int) -> int:
     """Current level for given total XP."""
     level = 1
-    while xp_for_level(level + 1) <= total_xp:
+    while level < MAX_LEVEL and xp_for_level(level + 1) <= total_xp:
         level += 1
     return level
 
@@ -56,12 +73,13 @@ def xp_progress(total_xp: int) -> dict[str, Any]:
     """Return current level, XP into level, XP needed for next level."""
     level = level_from_xp(total_xp)
     current_threshold = xp_for_level(level)
-    next_threshold = xp_for_level(level + 1)
+    next_threshold = xp_for_level(level + 1) if level < MAX_LEVEL else current_threshold
     xp_into_level = total_xp - current_threshold
     xp_needed = next_threshold - current_threshold
 
     return {
         "level": level,
+        "max_level": MAX_LEVEL,
         "total_xp": total_xp,
         "xp_into_level": xp_into_level,
         "xp_for_next": xp_needed,
@@ -70,28 +88,39 @@ def xp_progress(total_xp: int) -> dict[str, Any]:
     }
 
 
+# ── Titles ──
+# Every 5 levels for first 30, then every 10, special milestones at end
+
+_TITLES = [
+    (1000, "∞ Eternal Lexicon"),
+    (750,  "Word Titan"),
+    (500,  "Grand Lexicographer"),
+    (300,  "Linguistic Emperor"),
+    (200,  "Eloquence Lord"),
+    (150,  "Dictionary Knight"),
+    (100,  "Vocabulary Master"),
+    (90,   "Polyglot Herald"),
+    (80,   "Syntax Sage"),
+    (70,   "Word Architect"),
+    (60,   "Lexicon Guardian"),
+    (50,   "Vocabulary Artisan"),
+    (40,   "Language Scholar"),
+    (30,   "Word Connoisseur"),
+    (25,   "Skilled Linguist"),
+    (20,   "Rising Wordsmith"),
+    (15,   "Word Explorer"),
+    (10,   "Curious Learner"),
+    (5,    "Word Sprout"),
+    (1,    "Novice"),
+]
+
+
 def level_title(level: int) -> str:
     """Fun title based on level."""
-    if level >= 50:
-        return "Lexicon Sage"
-    elif level >= 40:
-        return "Word Architect"
-    elif level >= 30:
-        return "Vocabulary Master"
-    elif level >= 20:
-        return "Language Scholar"
-    elif level >= 15:
-        return "Word Connoisseur"
-    elif level >= 10:
-        return "Skilled Linguist"
-    elif level >= 7:
-        return "Rising Wordsmith"
-    elif level >= 5:
-        return "Curious Learner"
-    elif level >= 3:
-        return "Word Explorer"
-    else:
-        return "Novice"
+    for threshold, title in _TITLES:
+        if level >= threshold:
+            return title
+    return "Novice"
 
 
 # ── Streak multiplier ──
@@ -99,25 +128,25 @@ def level_title(level: int) -> str:
 def streak_multiplier(streak_days: int) -> float:
     """XP multiplier based on streak length."""
     if streak_days >= 30:
-        return 2.0
+        return 1.6
     elif streak_days >= 14:
-        return 1.8
+        return 1.4
     elif streak_days >= 7:
-        return 1.5
+        return 1.25
     elif streak_days >= 2:
-        return 1.2
+        return 1.1
     return 1.0
 
 
-# ── XP award amounts ──
+# ── XP award amounts (reduced for slower progression) ──
 
-XP_SEARCH = 5
-XP_SAVE = 10
-XP_QUIZ_CORRECT = 25
-XP_QUIZ_PERFECT = 100
-XP_DAILY_LOGIN = 15
-XP_FLASHCARD = 10
-XP_DECK_COMPLETE = 50
+XP_SEARCH = 3
+XP_SAVE = 5
+XP_QUIZ_CORRECT = 10
+XP_QUIZ_PERFECT = 50
+XP_DAILY_LOGIN = 10
+XP_FLASHCARD = 5
+XP_DECK_COMPLETE = 25
 
 
 def calculate_award(action: str, streak_days: int = 0, **kwargs) -> int:

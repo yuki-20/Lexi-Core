@@ -1,4 +1,4 @@
-# 🌊 LexiCore Engine v5.4
+# 🌊 LexiCore Engine v5.5
 
 <div align="center">
 
@@ -18,11 +18,12 @@
 ### 🔍 Dictionary Engine
 - **Exact search** with Huffman-compressed binary index (sub-millisecond lookups on 300K+ words)
 - **Fuzzy matching** with Levenshtein + Double Metaphone phonetic algorithms
-- **Autocomplete** via in-memory Trie with prefix search
+- **Autocomplete** via in-memory Trie with instant prefix search (triggers on first keystroke)
 - **Reverse dictionary** using TF-IDF inverted index (find words by definition)
 - **Bloom filter** for instant negative lookups
 - **Cambridge Dictionary** online fallback for words not in local DB
 - **Word of the Day** with 2-hour local rotation or curated online picks
+- **Save to Dictionary** — Push saved words into the dictionary browser with one tap
 
 ### 🤖 Lexi AI Assistant
 - **10 LLM models** (DeepSeek-R1, Qwen3, Gemma 3, Llama 3.3, GLM-4, and more)
@@ -41,28 +42,37 @@
 - **Auto-definitions** — Cards auto-fill definitions from the dictionary
 
 ### 📝 Quiz System
-- **Multiple-choice quizzes** generated from saved words or flashcard decks
-- **Instant grading** with detailed feedback and score tracking
-- **Quiz history** with review and analytics
+- **Multiple-choice quizzes** generated from saved words, flashcard decks, custom words, or imported files
+- **Selectable question count** — Choose 5–30 questions per quiz via slider
+- **Auto-digest on import** — Words without definitions are automatically looked up before generating quiz
+- **Smart definition lookup** — Local dictionary + online API fallback ensures every question has a proper answer
+- **Performance analytics** — Time taken, accuracy rate, avg time per question, per-question breakdown
+- **Quiz history chart** — Line chart showing score trend over time with best/average/total stats
+- **Past quiz records** — Browse recent quizzes with score badges and progress bars
 
 ### 📊 Learning Analytics
 - **Performance dashboard** with daily activity charts
-- **XP & Leveling** — Earn XP for searches, saves, quizzes, and more
+- **XP & Leveling v2** — Rebalanced polynomial curve (level² × 150), max level 1000
+- **20 unique titles** — From "Novice" (Lv 1) → "Word Titan" (Lv 750) → "∞ Eternal Lexicon" (Lv 1000)
+- **Title progression** — Every 5 levels for first 30, then every 10 levels, with special milestones
 - **Daily quests** — Complete challenges for bonus XP
-- **Streak system** with day-count tracking
+- **Streak system** with day-count tracking and XP multipliers (1.1× to 1.6×)
 - **Streak Pets** — Unlock virtual companions (Ember Fox, Volt Owl, Aqua Dragon, Prisma) at milestone streaks
 
-### 📁 Projects & Organization
-- **Project folders** — Group vocabulary by topic, class, or goal
-- **Color-coded** with custom icons
-- **Per-project decks** — Create focused flashcard sets within projects
+### 📁 Saved Words & Organization
+- **Save/unsave toggle** — Tap bookmark to save, tap again to unsave (correctly synced across views)
+- **Digested vs Undigested** — Words separated by whether definitions have been fetched
+- **Background digest** — Auto-fetch definitions for all undigested words with progress bar
+- **Add to Dictionary** — Push all digested saved words into the dictionary browser
+- **Create flashcard decks** from saved words with one tap
+- **Project folders** — Group vocabulary by topic, class, or goal with color-coding
 
 ### 🎧 Multimedia
-- **Pronunciation audio** (TTS via gTTS, Cambridge audio URLs)
+- **Pronunciation audio** (TTS via gTTS, Cambridge audio URLs) — In-app playback
 - **Contextual images** for visual vocabulary learning
 - **OCR screen capture** — Grab text from screen regions
 - **Anki export** — Export decks as `.apkg` files for Anki
-- **File import** — Bulk import words from `.txt` or `.json` files
+- **File import** — Bulk import words from `.txt` or `.json` files with streaming progress
 
 ### 🎨 Liquid Glass UI
 - **iOS 26-inspired** glassmorphism with GPU-accelerated CustomPainters
@@ -76,7 +86,7 @@
 ## 🏗️ Architecture
 
 ```
-LexiCore v5.4
+LexiCore v5.5
 ├── engine/                     Python Backend (FastAPI on :8741)
 │   ├── data/                   Huffman coding, binary index, meaning store
 │   │   ├── huffman.py          Huffman compression/decompression
@@ -90,14 +100,14 @@ LexiCore v5.4
 │   ├── learning/               Learning engine
 │   │   ├── db.py               SQLite (SM-2, flashcards, quizzes, profiles)
 │   │   ├── sm2.py              SM-2 spaced repetition algorithm
-│   │   └── xp_engine.py        XP, leveling, and daily quests
+│   │   └── xp_engine.py        XP v2 — level² curve, max 1000, 20 titles
 │   ├── media/                  Multimedia services
 │   │   ├── tts.py              Text-to-speech audio
 │   │   ├── images.py           Contextual image fetching
 │   │   ├── ocr.py              Screen region OCR
 │   │   ├── anki_export.py      Anki .apkg export
-│   │   └── cambridge.py        Cambridge Dictionary scraper
-│   ├── main.py                 FastAPI server (1400+ lines, 60+ endpoints)
+│   │   └── cambridge.py        Cambridge Dictionary + dictionaryapi.dev
+│   ├── main.py                 FastAPI server (1800+ lines, 70+ endpoints)
 │   ├── ai_config.json          Encrypted API key (gitignored)
 │   └── encrypt_key.py          API key encryption utility
 │
@@ -105,13 +115,14 @@ LexiCore v5.4
 │   ├── lib/
 │   │   ├── main.dart           App shell, animated sidebar, routing
 │   │   ├── pages/
-│   │   │   ├── home_page.dart          Dashboard, Word of the Day, streaks
+│   │   │   ├── home_page.dart          Search, save/unsave toggle, Word of the Day
 │   │   │   ├── lexi_ai_page.dart       AI chat with CoT, web search, vision
 │   │   │   ├── flashcards_page.dart    Deck editor, 3D flip study mode
-│   │   │   ├── quiz_page.dart          Quiz interface
+│   │   │   ├── quiz_page.dart          Quiz with analytics, history chart
+│   │   │   ├── dictionary_page.dart    Alphabetical browser with expand-to-define
 │   │   │   ├── projects_page.dart      Project management
 │   │   │   ├── project_detail_page.dart  Project details + decks
-│   │   │   ├── saved_words_page.dart   Saved vocabulary list
+│   │   │   ├── saved_words_page.dart   Saved words, digest, add-to-dictionary
 │   │   │   ├── performance_page.dart   Analytics dashboard
 │   │   │   └── settings_page.dart      User profile, avatar, preferences
 │   │   ├── services/
@@ -119,7 +130,9 @@ LexiCore v5.4
 │   │   ├── theme/
 │   │   │   └── liquid_glass_theme.dart Design tokens, colors, typography
 │   │   └── widgets/
-│   │       └── glass_panel.dart        Reusable glassmorphism container
+│   │       ├── glass_panel.dart        Reusable glassmorphism container
+│   │       ├── definition_card.dart    Word definition + audio + save toggle
+│   │       └── search_bar.dart         Pill-shaped glass search input
 │   └── assets/images/                  App icons, brand assets
 │
 ├── data/                       Generated data files (gitignored)
@@ -202,6 +215,14 @@ All endpoints are available at `http://localhost:8741`.
 | `/api/wotd` | GET | Word of the Day |
 | `/ws` | WebSocket | Real-time autocomplete stream |
 
+### Dictionary Browser
+
+| Endpoint | Method | Description |
+|---|---|---|
+| `/api/dictionary/words` | GET | Paginated word list (letter filter, pagination) |
+| `/api/dictionary/letters` | GET | Available letters with word counts |
+| `/api/dictionary/add-saved` | POST | Merge saved words into dictionary |
+
 ### Learning & Progress
 
 | Endpoint | Method | Description |
@@ -210,10 +231,11 @@ All endpoints are available at `http://localhost:8741`.
 | `/api/reviews/due` | GET | Get due review cards |
 | `/api/stats` | GET | Engine & learning statistics |
 | `/api/saved` | GET/POST/DELETE | Manage saved word list |
+| `/api/saved/digest` | POST | Auto-fetch definitions for undigested words |
 | `/api/history` | GET | Lookup history |
 | `/api/profile` | GET/PUT | User profile management |
 | `/api/avatar` | GET/POST | Avatar upload/retrieve |
-| `/api/xp/status` | GET | XP, level, and progress |
+| `/api/xp/status` | GET | XP, level, title, and progress |
 | `/api/xp/award` | POST | Award XP for actions |
 | `/api/quests` | GET | Daily quest progress |
 | `/api/welcome` | GET | Personalized welcome message |
@@ -236,9 +258,10 @@ All endpoints are available at `http://localhost:8741`.
 
 | Endpoint | Method | Description |
 |---|---|---|
-| `/api/quiz/generate` | GET | Generate multiple-choice quiz |
-| `/api/quiz/submit` | POST | Submit answers & get grading |
-| `/api/quiz/history` | GET | Quiz attempt history |
+| `/api/quiz/generate` | GET | Generate quiz from saved words (auto-digests) |
+| `/api/quiz/generate` | POST | Generate quiz from custom word list |
+| `/api/quiz/submit` | POST | Submit answers, save result, get grading |
+| `/api/quiz/history` | GET | Quiz attempt history with scores |
 | `/api/quiz/{id}` | GET | Quiz detail by ID |
 
 ### AI Chat (Lexi AI)
@@ -275,6 +298,7 @@ All endpoints are available at `http://localhost:8741`.
 | Endpoint | Method | Description |
 |---|---|---|
 | `/api/import` | POST | Import words from .txt/.json file |
+| `/api/import/file/stream` | POST | Streaming import with SSE progress |
 | `/api/import/files` | GET | List imported files |
 | `/api/import/files/{id}` | DELETE | Delete imported file |
 | `/api/import/files/{id}/words` | GET | Get words from imported file |
@@ -311,20 +335,45 @@ All endpoints are available at `http://localhost:8741`.
 
 ---
 
+## ⚡ XP & Leveling System (v2)
+
+| Level | Title | XP Required |
+|---|---|---|
+| 1 | Novice | 0 |
+| 5 | Word Sprout | 3,750 |
+| 10 | Curious Learner | 15,000 |
+| 15 | Word Explorer | 33,750 |
+| 20 | Rising Wordsmith | 60,000 |
+| 25 | Skilled Linguist | 93,750 |
+| 30 | Word Connoisseur | 135,000 |
+| 50 | Vocabulary Artisan | 375,000 |
+| 100 | Vocabulary Master | 1,500,000 |
+| 200 | Eloquence Lord | 6,000,000 |
+| 500 | Grand Lexicographer | 37,500,000 |
+| 750 | Word Titan | 84,375,000 |
+| 1000 | ∞ Eternal Lexicon | 150,000,000 |
+
+**XP Awards:** Search (+3), Save (+5), Quiz Correct (+10), Quiz Perfect (+50), Daily Login (+10), Flashcard (+5), Deck Complete (+25)
+
+**Streak Multipliers:** 2+ days (1.1×), 7+ days (1.25×), 14+ days (1.4×), 30+ days (1.6×)
+
+---
+
 ## 🗺️ Development Roadmap
 
-### ✅ Completed (v1.0 → v5.4)
+### ✅ Completed (v1.0 → v5.5)
 
 | Version | Features |
 |---|---|
 | **v1.0** | Core dictionary engine, Huffman compression, Trie, Bloom filter |
 | **v2.0** | FastAPI server, fuzzy search, TTS, OCR, Anki export, SM-2 learning |
-| **v3.0** | Flashcards, quizzes, file import, user profiles, streak pets, performance analytics, projects, XP/leveling system |
+| **v3.0** | Flashcards, quizzes, file import, user profiles, streak pets, performance analytics, projects, XP/leveling |
 | **v3.1** | Avatar upload, project folders, daily quests |
 | **v4.0** | Flutter Liquid Glass UI, animated sidebar, dark theme, 9-page app |
 | **v5.0** | Lexi AI integration (10 models), CoT extraction, streaming SSE, conversation history |
-| **v5.3** | Encrypted API key, custom water drop icon, transparent app icons |
-| **v5.4** | Web search (DuckDuckGo RAG), universal CoT, vision model support (Gemma 3), flashcard deck editor (CRUD), `<think>` tag instructions for all models |
+| **v5.3** | Encrypted API key, custom water drop app icon, transparent app icons |
+| **v5.4** | Web search (DuckDuckGo RAG), universal CoT, vision (Gemma 3), flashcard deck editor, `<think>` tags |
+| **v5.5** | Quiz analytics & history chart, save/unsave toggle, add-to-dictionary, XP v2 rebalance (max 1000, 20 titles), auto-digest, quiz count selector, definition quality fixes, SQLite deadlock fix |
 
 ### 🔮 Planned (v6.0+)
 
@@ -338,6 +387,9 @@ All endpoints are available at `http://localhost:8741`.
 - [ ] **Plugin system** — Extensible engine modules for custom data sources
 - [ ] **Theme editor** — User-customizable UI themes and accent colors
 - [ ] **Cloud sync** — Cross-device progress synchronization
+- [ ] **Leaderboard** — Compare XP and streaks with friends
+- [ ] **Achievement badges** — Unlock rewards for learning milestones
+- [ ] **Word games** — Crossword, word scramble, and hangman mini-games
 
 ---
 
@@ -359,13 +411,14 @@ python -m pytest engine/tests/ --cov=engine --cov-report=html
 |---|---|
 | **Backend** | Python 3.12+, FastAPI, Uvicorn, httpx |
 | **Frontend** | Flutter 3.x (Windows Desktop) |
-| **Database** | SQLite (via Python sqlite3) |
+| **Database** | SQLite (WAL mode, 30s busy timeout) |
 | **AI** | FPT AI Factory API (10 LLMs) |
 | **Web Search** | DuckDuckGo HTML API |
+| **Definitions** | dictionaryapi.dev (online fallback) |
 | **Data Structures** | Huffman tree, Trie, Bloom filter, TF-IDF inverted index |
 | **Algorithms** | SM-2 spaced repetition, Levenshtein distance, Double Metaphone |
 | **Encryption** | Fernet (AES-128-CBC) + PBKDF2-SHA256 |
-| **Audio** | gTTS, Cambridge pronunciation URLs |
+| **Audio** | gTTS, Cambridge pronunciation URLs, audioplayers |
 | **Image** | Pillow, Tesseract OCR |
 
 ---

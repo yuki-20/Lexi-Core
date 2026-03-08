@@ -277,6 +277,30 @@ class _LexiAiPageState extends State<LexiAiPage> {
                           ),
                           const SizedBox(width: 4),
                           _buildModelDropdown(),
+                          const SizedBox(width: 4),
+                          // Web search toggle
+                          Tooltip(
+                            message: _webSearchEnabled ? 'Web Search: ON' : 'Web Search: OFF',
+                            child: _ToolbarButton(
+                              icon: Icons.language_rounded,
+                              tooltip: '',
+                              isActive: _webSearchEnabled,
+                              onTap: () => setState(() => _webSearchEnabled = !_webSearchEnabled),
+                            ),
+                          ),
+                          // Vision model attach button
+                          if (_isVisionModel) ...[
+                            const SizedBox(width: 4),
+                            Tooltip(
+                              message: 'Attach Image (Gemma 3 Vision)',
+                              child: _ToolbarButton(
+                                icon: Icons.attach_file_rounded,
+                                tooltip: '',
+                                isActive: _pendingImages.isNotEmpty,
+                                onTap: _pickImage,
+                              ),
+                            ),
+                          ],
                           const Spacer(),
                           GestureDetector(
                             onTap: _sendMessage,
@@ -873,6 +897,41 @@ class _LexiAiPageState extends State<LexiAiPage> {
                     fontSize: 13, fontWeight: FontWeight.w600, color: LiquidGlassTheme.textPrimary,
                   )),
                   const Spacer(),
+                  // Delete All button
+                  if (_history.isNotEmpty)
+                    GestureDetector(
+                      onTap: () async {
+                        final confirm = await showDialog<bool>(
+                          context: context,
+                          builder: (ctx) => AlertDialog(
+                            backgroundColor: const Color(0xFF1A1A2E),
+                            title: const Text('Delete All Chats', style: TextStyle(color: Colors.white)),
+                            content: Text('Delete all ${_history.length} conversations?', style: const TextStyle(color: Colors.white70)),
+                            actions: [
+                              TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+                              TextButton(
+                                onPressed: () => Navigator.pop(ctx, true),
+                                child: const Text('Delete All', style: TextStyle(color: Colors.redAccent)),
+                              ),
+                            ],
+                          ),
+                        );
+                        if (confirm == true) {
+                          await _engine.deleteAllAiConversations();
+                          _newChat();
+                          _loadHistory();
+                        }
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(6),
+                          color: Colors.redAccent.withValues(alpha: 0.1),
+                        ),
+                        child: const Icon(Icons.delete_sweep_rounded, size: 16, color: Colors.redAccent),
+                      ),
+                    ),
+                  const SizedBox(width: 8),
                   GestureDetector(
                     onTap: _newChat,
                     child: Container(

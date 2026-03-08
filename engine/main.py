@@ -400,10 +400,103 @@ async def api_get_saved():
     return JSONResponse({"words": engine.db.get_saved_words()})
 
 
+@app.post("/api/saved/cleanup")
+async def api_cleanup_saved():
+    """Split comma-separated saved word entries into individual words."""
+    import re
+    words = engine.db.get_saved_words()
+    split_count = 0
+    new_words = []
+
+    for entry in words:
+        word_text = entry.get("word", "")
+        source = entry.get("source_file", "")
+
+        # Check if this entry contains delimiters (commas, semicolons, tabs)
+        if re.search(r'[,;\t|]', word_text):
+            # This is a combined entry — split it
+            tokens = re.split(r'[,;\t|]+', word_text)
+            individual = [t.strip().strip('"').strip("'") for t in tokens if t.strip()]
+            individual = [w for w in individual if w and len(w) < 100]
+
+            if len(individual) > 1:
+                # Delete the old combined entry
+                engine.db.delete_saved_word(word_text)
+
+                # Save each individual word
+                for w in individual:
+                    defn = engine.get_definition_dict(w)
+                    definition = None
+                    if defn and defn.get("definitions"):
+                        definition = defn["definitions"][0] if isinstance(defn["definitions"], list) else str(defn["definitions"])
+                    engine.db.save_word(w, definition=definition, source_file=source)
+                    new_words.append(w)
+
+                split_count += 1
+
+    return JSONResponse({
+        "entries_split": split_count,
+        "new_words": len(new_words),
+        "words": new_words,
+    })
+
+
 @app.delete("/api/saved/{word}")
 async def api_delete_saved(word: str):
     deleted = engine.db.delete_saved_word(word)
     return JSONResponse({"deleted": deleted, "word": word})
+
+
+@app.post("/api/saved/digest")
+async def api_digest_saved():
+    """Look up definitions for all undigested saved words. Streams SSE progress."""
+    from starlette.responses import StreamingResponse
+
+    words = engine.db.get_saved_words()
+    undigested = [w for w in words if not w.get("definition")]
+
+    async def stream():
+        total = len(undigested)
+        found = 0
+        for i, entry in enumerate(undigested):
+            word = entry.get("word", "")
+            definition = None
+            status = "not_found"
+
+            # Try local first
+            defn = engine.get_definition_dict(word)
+            if defn and defn.get("definitions"):
+                defs = defn["definitions"]
+                definition = defs[0] if isinstance(defs, list) else str(defs)
+                status = "found"
+            else:
+                # Online fallback via dictionaryapi.dev
+                try:
+                    online = await lookup_online(word)
+                    if online and online.get("definitions"):
+                        defs = online["definitions"]
+                        definition = defs[0] if isinstance(defs, list) else str(defs)
+                        status = "found"
+                except Exception:
+                    pass
+
+            if definition:
+                found += 1
+                engine.db.save_word(word, definition=definition,
+                                    source_file=entry.get("source_file", ""))
+
+            progress = round((i + 1) / total * 100) if total > 0 else 100
+            yield f"data: {json.dumps({'word': word, 'status': status, 'definition': definition, 'progress': progress, 'current': i + 1, 'total': total, 'found': found})}\n\n"
+
+            # Small delay to avoid overwhelming the API
+            await asyncio.sleep(0.05)
+
+        yield f"data: {json.dumps({'done': True, 'total': total, 'found': found})}\n\n"
+
+    if not undigested:
+        return JSONResponse({"message": "All words already have definitions", "total": 0})
+
+    return StreamingResponse(stream(), media_type="text/event-stream")
 
 
 @app.get("/api/history")
@@ -594,13 +687,75 @@ async def api_generate_quiz(deck_id: int | None = Query(None),
         saved = engine.db.get_saved_words()
         words = [{"word": w["word"], "definition": w.get("definition", "")} for w in saved]
 
-    if len(words) < 4:
+    # Auto-digest: look up definitions for words that don't have them
+    for w in words:
+        if not w.get("definition") or not w["definition"].strip():
+            # Try local first
+            defn = engine.get_definition_dict(w["word"])
+            if defn and defn.get("definitions"):
+                defs = defn["definitions"]
+                w["definition"] = defs[0] if isinstance(defs, list) else str(defs)
+            else:
+                # Online fallback
+                try:
+                    online = await lookup_online(w["word"])
+                    if online and online.get("definitions"):
+                        defs = online["definitions"]
+                        w["definition"] = defs[0] if isinstance(defs, list) else str(defs)
+                        # Save for future use
+                        engine.db.save_word(w["word"], definition=w["definition"])
+                except Exception:
+                    pass
+
+    # Filter to words with definitions
+    valid = [w for w in words if w.get("definition") and w["definition"].strip()]
+
+    if len(valid) < 4:
+        return JSONResponse(
+            {"error": "Not enough words with definitions. Try digesting your words first!"},
+            status_code=400,
+        )
+
+    questions = engine.db.generate_quiz(valid, count)
+    return JSONResponse({"questions": questions, "total": len(questions)})
+
+
+class QuizFromWordsRequest(BaseModel):
+    words: list[str]
+    count: int = 10
+
+
+@app.post("/api/quiz/generate")
+async def api_generate_quiz_from_words(req: QuizFromWordsRequest):
+    """Generate quiz from a custom word list. Auto-digests definitions."""
+    word_defs = []
+    for w in req.words:
+        definition = ""
+        # Try local first
+        defn = engine.get_definition_dict(w)
+        if defn and defn.get("definitions"):
+            defs = defn["definitions"]
+            definition = defs[0] if isinstance(defs, list) else str(defs)
+        else:
+            # Online fallback
+            try:
+                online = await lookup_online(w)
+                if online and online.get("definitions"):
+                    defs = online["definitions"]
+                    definition = defs[0] if isinstance(defs, list) else str(defs)
+                    # Also save the word with its definition for future use
+                    engine.db.save_word(w, definition=definition)
+            except Exception:
+                pass
+        word_defs.append({"word": w, "definition": definition})
+
+    if len(word_defs) < 4:
         return JSONResponse(
             {"error": "Need at least 4 words to generate a quiz"},
             status_code=400,
         )
 
-    questions = engine.db.generate_quiz(words, count)
+    questions = engine.db.generate_quiz(word_defs, req.count)
     return JSONResponse({"questions": questions, "total": len(questions)})
 
 
@@ -675,8 +830,12 @@ async def api_import_file(file: UploadFile = File(...)):
         except json.JSONDecodeError:
             return JSONResponse({"error": "Invalid JSON"}, status_code=400)
     else:
-        # Text file: one word per line
-        words = [line.strip() for line in text.splitlines() if line.strip()]
+        # Text file: split on newlines, commas, semicolons, tabs, pipes
+        import re
+        raw_tokens = re.split(r'[\n,;\t|]+', text)
+        words = [tok.strip().strip('"').strip("'") for tok in raw_tokens if tok.strip()]
+        # Filter out empty strings and very long tokens (likely not single words)
+        words = [w for w in words if w and len(w) < 100]
 
     if not words:
         return JSONResponse({"error": "No words found in file"}, status_code=400)
@@ -800,6 +959,40 @@ async def api_performance_history():
 # ══════════════════════════════════════════════════════════════════════
 # v3.0 — WELCOME MESSAGES
 # ══════════════════════════════════════════════════════════════════════
+
+@app.get("/api/search/{word}")
+async def api_search_word(word: str):
+    """REST endpoint to look up a word definition."""
+    result = engine.get_definition_dict(word)
+    if result:
+        return JSONResponse({"found": True, "word": word, **result})
+    return JSONResponse({"found": False, "word": word})
+
+
+@app.get("/api/tts/{word}")
+async def api_tts(word: str):
+    """Generate TTS audio for a word using Google Translate TTS."""
+    import httpx
+    from starlette.responses import StreamingResponse
+    import urllib.parse
+
+    encoded = urllib.parse.quote(word)
+    url = f"https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=en&q={encoded}"
+
+    async def stream_audio():
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(url, headers={
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+                "Referer": "https://translate.google.com/",
+            }, follow_redirects=True, timeout=10)
+            yield resp.content
+
+    return StreamingResponse(
+        stream_audio(),
+        media_type="audio/mpeg",
+        headers={"Cache-Control": "public, max-age=86400"},
+    )
+
 
 @app.get("/api/welcome")
 async def api_welcome():
@@ -1184,6 +1377,8 @@ ALWAYS write in english."""
             streak = engine.db.get_streak_days()
         except Exception:
             pass
+        # Custom instructions from user profile
+        custom_instructions = profile.get("custom_instructions", "")
         context = (
             f"\n\nUser Profile:\n"
             f"- Name: {name}\n"
@@ -1191,6 +1386,8 @@ ALWAYS write in english."""
             f"- Learning streak: {streak} days\n"
             f"Help them study vocabulary, explain words, give examples, and motivate their learning."
         )
+        if custom_instructions:
+            context += f"\n\nCustom Instructions from User:\n{custom_instructions}"
         prompt = base + context
     except Exception:
         prompt = base
@@ -1442,6 +1639,148 @@ async def api_ai_save(req: AiSaveRequest):
 async def api_ai_delete(conv_id: int):
     engine.db.delete_ai_conversation(conv_id)
     return JSONResponse({"deleted": True})
+
+
+@app.delete("/api/ai/history")
+async def api_ai_delete_all():
+    """Delete all AI conversations."""
+    count = engine.db.delete_all_ai_conversations()
+    return JSONResponse({"deleted": count})
+
+
+# ── Dictionary Browse ─────────────────────────────────────────────
+
+@app.post("/api/dictionary/add-saved")
+async def api_add_saved_to_dictionary():
+    """Merge all digested saved words into the in-memory dictionary."""
+    saved = engine.db.get_saved_words()
+    digested = [w for w in saved if w.get("definition") and w["definition"].strip()]
+    existing = set(engine._all_words)
+    added = 0
+    for w in digested:
+        word = w["word"].strip().lower()
+        if word and word not in existing:
+            engine._all_words.append(word)
+            existing.add(word)
+            added += 1
+    return JSONResponse({
+        "message": f"Added {added} new words to dictionary",
+        "added": added,
+        "total_dictionary": len(engine._all_words),
+    })
+
+@app.get("/api/dictionary/words")
+async def api_dictionary_words(
+    letter: str = Query("", max_length=1),
+    page: int = Query(1, ge=1),
+    limit: int = Query(100, ge=1, le=500),
+):
+    """Get paginated word list for dictionary browsing."""
+    all_words = sorted(engine._all_words)
+    if letter:
+        all_words = [w for w in all_words if w.upper().startswith(letter.upper())]
+    total = len(all_words)
+    start = (page - 1) * limit
+    end = start + limit
+    words = all_words[start:end]
+    return JSONResponse({
+        "words": words,
+        "total": total,
+        "page": page,
+        "pages": (total + limit - 1) // limit,
+    })
+
+
+@app.get("/api/dictionary/letters")
+async def api_dictionary_letters():
+    """Get available first letters with counts."""
+    all_words = engine._all_words
+    counts: dict[str, int] = {}
+    for w in all_words:
+        if w:
+            letter = w[0].upper()
+            if letter.isalpha():
+                counts[letter] = counts.get(letter, 0) + 1
+    return JSONResponse({"letters": dict(sorted(counts.items())), "total": len(all_words)})
+
+
+# ── Streaming File Import ─────────────────────────────────────────
+
+@app.post("/api/import/file/stream")
+async def api_import_file_stream(
+    file: UploadFile = File(...),
+    search_online: bool = Query(True),
+):
+    """Import words from file with SSE progress updates."""
+    import httpx
+    from starlette.responses import StreamingResponse
+    import json as _stream_json
+
+    content = await file.read()
+    text = content.decode("utf-8", errors="ignore")
+    filename = file.filename or "unknown.txt"
+
+    # Parse words
+    words: list[str] = []
+    if filename.endswith(".json"):
+        try:
+            data = json.loads(text)
+            if isinstance(data, list):
+                words = [str(w) for w in data]
+            elif isinstance(data, dict):
+                words = list(data.keys())
+        except json.JSONDecodeError:
+            return JSONResponse({"error": "Invalid JSON"}, status_code=400)
+    else:
+        words = [line.strip() for line in text.splitlines() if line.strip()]
+
+    if not words:
+        return JSONResponse({"error": "No words found in file"}, status_code=400)
+
+    file_id = engine.db.add_imported_file(filename, len(words))
+
+    async def progress_generator():
+        total = len(words)
+        for i, word in enumerate(words):
+            # Local lookup first
+            defn = engine.get_definition_dict(word)
+            definition = None
+            source = "local"
+
+            if defn and defn.get("definitions"):
+                defs = defn["definitions"]
+                definition = defs[0] if isinstance(defs, list) else str(defs)
+            elif search_online:
+                # Try Cambridge online
+                try:
+                    from engine.media.cambridge import lookup_online
+                    online = await lookup_online(word)
+                    if online and online.get("definitions"):
+                        defs = online["definitions"]
+                        definition = defs[0] if isinstance(defs, list) else str(defs)
+                        source = "online"
+                except Exception:
+                    pass
+
+            engine.db.save_word(word, definition=definition, source_file=filename)
+
+            event = {
+                "progress": i + 1,
+                "total": total,
+                "word": word,
+                "status": "found" if definition else "no_definition",
+                "source": source,
+            }
+            yield f"data: {_stream_json.dumps(event)}\n\n"
+
+        # Final done event
+        yield f"data: {_stream_json.dumps({'done': True, 'file_id': file_id, 'total': total})}\n\n"
+
+    return StreamingResponse(
+        progress_generator(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 # ── Run ───────────────────────────────────────────────────────────────

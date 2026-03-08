@@ -97,17 +97,24 @@ class _HomePageState extends State<HomePage> {
     // Award XP for searching
     await _engine.awardXp('search');
 
+    // Check if word is already saved
+    bool alreadySaved = false;
+    try {
+      final savedWords = await _engine.getSavedWords();
+      alreadySaved = savedWords.any((w) => (w['word'] as String?)?.toLowerCase() == query.trim().toLowerCase());
+    } catch (_) {}
+
     if (mounted) {
       setState(() {
         _result = result;
         _isLoading = false;
-        _isSaved = false;
+        _isSaved = alreadySaved;
       });
     }
   }
 
   void _onSearchChanged(String value) async {
-    if (value.length < 2) {
+    if (value.isEmpty) {
       setState(() => _suggestions = []);
       return;
     }
@@ -115,13 +122,20 @@ class _HomePageState extends State<HomePage> {
     if (mounted) setState(() => _suggestions = items.map((i) => i.word).toList());
   }
 
-  Future<void> _onSaveWord() async {
+  Future<void> _onToggleSave() async {
     if (_result == null || !_result!.found) return;
-    final ok = await _engine.saveWord(_result!.word,
-        definition: _result!.definitions.isNotEmpty ? _result!.definitions.first : null);
-    if (ok) {
-      await _engine.awardXp('save');
-      if (mounted) setState(() => _isSaved = true);
+    if (_isSaved) {
+      // Unsave
+      final ok = await _engine.deleteSavedWord(_result!.word);
+      if (ok && mounted) setState(() => _isSaved = false);
+    } else {
+      // Save
+      final ok = await _engine.saveWord(_result!.word,
+          definition: _result!.definitions.isNotEmpty ? _result!.definitions.first : null);
+      if (ok) {
+        await _engine.awardXp('save');
+        if (mounted) setState(() => _isSaved = true);
+      }
     }
   }
 
@@ -211,7 +225,7 @@ class _HomePageState extends State<HomePage> {
                 children: [
                   DefinitionCard(
                     result: _result!,
-                    onSave: _onSaveWord,
+                    onSave: _onToggleSave,
                     isSaved: _isSaved,
                   ).animate().fadeIn(duration: 400.ms).slideY(begin: 0.05, end: 0),
                   if (_result!.source != null)
