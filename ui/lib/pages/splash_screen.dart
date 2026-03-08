@@ -119,20 +119,13 @@ class _SplashScreenState extends State<SplashScreen>
               ),
             ),
 
-            // Video player (centered, letterboxed)
+            // Video player (fullscreen)
             if (_videoReady)
-              Center(
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(20),
-                  child: SizedBox(
-                    width: MediaQuery.of(context).size.width * 0.85,
-                    height: MediaQuery.of(context).size.height * 0.6,
-                    child: Video(
-                      controller: _controller,
-                      controls: NoVideoControls,
-                      fill: Colors.transparent,
-                    ),
-                  ),
+              Positioned.fill(
+                child: Video(
+                  controller: _controller,
+                  controls: NoVideoControls,
+                  fit: BoxFit.cover,
                 ),
               ).animate().fadeIn(duration: 600.ms),
 
