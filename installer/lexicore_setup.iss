@@ -354,55 +354,64 @@ begin
   else
     TechLog('  [WARNING] pip returned exit code: ' + IntToStr(ResultCode));
 
-  // Step 6: Build Flutter UI (if Flutter is available) or download pre-built
-  ProgressPage.SetProgress(8, 10);
-  ProgressPage.SetText('Setting up LexiCore UI...', '');
-  TechLog('[STEP 6/6] Setting up UI...');
+  // Step 6: Download pre-built UI from GitHub Releases (always try this first)
+  ProgressPage.SetProgress(7, 10);
+  ProgressPage.SetText('Downloading LexiCore UI...', 'Downloading pre-built release from GitHub...');
+  TechLog('[STEP 6/6] Downloading pre-built UI from GitHub Releases...');
+  TechLog('  URL: https://github.com/yuki-20/Lexi-Core/releases/download/v5.5/LexiCore_UI.zip');
 
-  // Try building with Flutter first
-  if FileExists('C:\flutter\bin\flutter.bat') then
+  // Create ui directory
+  ForceDirectories(AppDir + '\ui');
+
+  PSCommand := '[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; ' +
+    'Invoke-WebRequest -Uri "https://github.com/yuki-20/Lexi-Core/releases/download/v5.5/LexiCore_UI.zip" -OutFile "' + ExpandConstant('{tmp}') + '\ui.zip" -UseBasicParsing';
+  RunCmd('powershell.exe', '-NoProfile -ExecutionPolicy Bypass -Command "' + PSCommand + '"', '', ResultCode);
+
+  if (ResultCode = 0) and FileExists(ExpandConstant('{tmp}') + '\ui.zip') then
   begin
-    TechLog('  Flutter SDK found. Building release...');
-    ProgressPage.SetText('Building LexiCore UI (Flutter)...', 'This may take 1-2 minutes...');
+    ProgressPage.SetProgress(8, 10);
+    ProgressPage.SetText('Extracting LexiCore UI...', '');
+    TechLog('  Download complete. Extracting...');
 
-    // Copy the UI source for building
-    PSCommand := 'Copy-Item -Path "' + SourceDir + '\ui" -Destination "' + AppDir + '\ui_src" -Recurse -Force';
+    PSCommand := 'Expand-Archive -Path "' + ExpandConstant('{tmp}') + '\ui.zip" -DestinationPath "' + AppDir + '\ui" -Force';
     RunCmd('powershell.exe', '-NoProfile -ExecutionPolicy Bypass -Command "' + PSCommand + '"', '', ResultCode);
-
-    // Build Flutter release
-    RunCmd('cmd.exe', '/c "C:\flutter\bin\flutter.bat" build windows --release 2>&1', AppDir + '\ui_src', ResultCode);
-
-    if ResultCode = 0 then
-    begin
-      TechLog('  Flutter build successful');
-      // Copy release build to app/ui/
-      PSCommand := 'Copy-Item -Path "' + AppDir + '\ui_src\build\windows\x64\runner\Release\*" -Destination "' + AppDir + '\ui" -Recurse -Force; ' +
-                   'Remove-Item -Path "' + AppDir + '\ui_src" -Recurse -Force -ErrorAction SilentlyContinue';
-      RunCmd('powershell.exe', '-NoProfile -ExecutionPolicy Bypass -Command "' + PSCommand + '"', '', ResultCode);
-      TechLog('  UI deployed to ' + AppDir + '\ui');
-    end
-    else
-    begin
-      TechLog('  [WARNING] Flutter build failed (code: ' + IntToStr(ResultCode) + ')');
-      TechLog('  Downloading pre-built UI from GitHub Releases...');
-      // Fallback: download pre-built release
-      PSCommand := 'try { ' +
-        'Invoke-WebRequest -Uri "https://github.com/yuki-20/Lexi-Core/releases/download/v5.5/LexiCore_UI.zip" -OutFile "' + ExpandConstant('{tmp}') + '\ui.zip" -UseBasicParsing; ' +
-        'Expand-Archive -Path "' + ExpandConstant('{tmp}') + '\ui.zip" -DestinationPath "' + AppDir + '\ui" -Force ' +
-        '} catch { Write-Host "Pre-built UI not available" }';
-      RunCmd('powershell.exe', '-NoProfile -ExecutionPolicy Bypass -Command "' + PSCommand + '"', '', ResultCode);
-    end;
+    TechLog('  UI extracted to ' + AppDir + '\ui');
   end
   else
   begin
-    TechLog('  Flutter SDK not found. Downloading pre-built UI...');
-    ProgressPage.SetText('Downloading pre-built LexiCore UI...', '');
-    PSCommand := 'try { ' +
-      'Invoke-WebRequest -Uri "https://github.com/yuki-20/Lexi-Core/releases/download/v5.5/LexiCore_UI.zip" -OutFile "' + ExpandConstant('{tmp}') + '\ui.zip" -UseBasicParsing; ' +
-      'Expand-Archive -Path "' + ExpandConstant('{tmp}') + '\ui.zip" -DestinationPath "' + AppDir + '\ui" -Force; ' +
-      'Write-Host "UI downloaded and extracted" ' +
-      '} catch { Write-Host "Pre-built UI not available — please install Flutter and build manually" }';
-    RunCmd('powershell.exe', '-NoProfile -ExecutionPolicy Bypass -Command "' + PSCommand + '"', '', ResultCode);
+    TechLog('  [WARNING] Pre-built download failed. Trying Flutter build...');
+
+    // Fallback: build from source if Flutter SDK is available
+    if FileExists('C:\flutter\bin\flutter.bat') then
+    begin
+      TechLog('  Flutter SDK found at C:\flutter. Building from source...');
+      ProgressPage.SetText('Building LexiCore UI from source...', 'This may take 1-2 minutes...');
+
+      PSCommand := 'Copy-Item -Path "' + SourceDir + '\ui" -Destination "' + AppDir + '\ui_src" -Recurse -Force';
+      RunCmd('powershell.exe', '-NoProfile -ExecutionPolicy Bypass -Command "' + PSCommand + '"', '', ResultCode);
+
+      RunCmd('cmd.exe', '/c "C:\flutter\bin\flutter.bat" pub get 2>&1', AppDir + '\ui_src', ResultCode);
+      RunCmd('cmd.exe', '/c "C:\flutter\bin\flutter.bat" build windows --release 2>&1', AppDir + '\ui_src', ResultCode);
+
+      if ResultCode = 0 then
+      begin
+        TechLog('  Flutter build successful');
+        PSCommand := 'Copy-Item -Path "' + AppDir + '\ui_src\build\windows\x64\runner\Release\*" -Destination "' + AppDir + '\ui" -Recurse -Force; ' +
+                     'Remove-Item -Path "' + AppDir + '\ui_src" -Recurse -Force -ErrorAction SilentlyContinue';
+        RunCmd('powershell.exe', '-NoProfile -ExecutionPolicy Bypass -Command "' + PSCommand + '"', '', ResultCode);
+        TechLog('  UI deployed to ' + AppDir + '\ui');
+      end
+      else
+      begin
+        TechLog('  [ERROR] Flutter build also failed (code: ' + IntToStr(ResultCode) + ')');
+        MsgBox('Could not set up the UI. Please build manually: cd ui && flutter build windows --release', mbError, MB_OK);
+      end;
+    end
+    else
+    begin
+      TechLog('  [ERROR] No Flutter SDK found and download failed.');
+      MsgBox('Could not download LexiCore UI. Please check your internet connection and try again.', mbError, MB_OK);
+    end;
   end;
 
   // Cleanup temp files
