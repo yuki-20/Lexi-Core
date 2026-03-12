@@ -4,6 +4,560 @@ A chronological log of all prompts and responses between the user and Antigravit
 
 ---
 
+## Session — 2026-03-13 01:46
+
+### 🧑 Prompt
+
+> Okay so for the first problem i have here is the new installation for new user from github is not working as expected ( error for everything, pet is not showing, quiz and other system like level system, import digest and everything just completely broken ) 
+> What i need you is too add those feature back, you can read the changelog from github for further details what had been implemented ( implement them back here ) 
+> Remember to check everything and then try to upload it to my github as a fresh installation 
+> My requirements is to have you constantly update everything on my github even the chatlog must be extra details 
+> this error only happens for new install user, can u fix the installer so it will remove every possible installed file and then install it fresh but make sure it will work, check for any possible problem, after u implement a fix u must test it to see if it's actually working or not, if it's not working then rethink again and do it again for a better fix 
+> implement the feature v6 for this version also
+
+### 🤖 Response
+
+**Step 1: Reproduced and isolated the fresh-install root causes**
+
+1. Confirmed the backend crashed on fresh clones when `engine/ai_config.json` was missing.
+2. Confirmed the warning path also used a non-ASCII `⚠` print that could break on cp1252 Windows consoles during startup.
+3. Confirmed `requirements.txt` was wrong for new installs:
+   - `python-multipart` was missing even though FastAPI `UploadFile = File(...)` endpoints exist.
+   - `PyAudio>=0.2.14` was in core requirements even though speech input is optional and fails on standard Windows machines without PortAudio headers.
+4. Confirmed the installer was downloading a dead release URL for the UI:
+   - old URL: `https://github.com/yuki-20/Lexi-Core/releases/download/v5.5/LexiCore_UI.zip`
+   - result: `404`
+5. Confirmed a real runtime logic regression:
+   - quiz submissions were no longer advancing quests or awarding XP after the old SQLite deadlock fix.
+   - cached searches were bypassing `log_search`, which silently broke search history and any search-based analytics/badges.
+
+**Step 2: Captured the original install failure**
+
+Command run:
+
+```powershell
+pip install -r requirements.txt
+```
+
+Important failure output:
+
+```text
+PyAudio>=0.2.14
+...
+fatal error C1083: Cannot open include file: 'portaudio.h': No such file or directory
+error: command 'C:\\Program Files\\Microsoft Visual Studio\\...' failed with exit code 2
+ERROR: Failed building wheel for PyAudio
+```
+
+Root cause:
+- new users were being asked to install optional speech packages during the mandatory runtime install.
+
+**Step 3: Fixed the SQLite profile, quiz, and achievement layer**
+
+Modified files:
+- `C:\Users\Yuki\Documents\Lexicore\engine\learning\db.py:178`
+- `C:\Users\Yuki\Documents\Lexicore\engine\learning\db.py:461`
+- `C:\Users\Yuki\Documents\Lexicore\engine\learning\db.py:484`
+- `C:\Users\Yuki\Documents\Lexicore\engine\learning\db.py:597`
+- `C:\Users\Yuki\Documents\Lexicore\engine\learning\db.py:611`
+- `C:\Users\Yuki\Documents\Lexicore\engine\learning\db.py:625`
+- `C:\Users\Yuki\Documents\Lexicore\engine\learning\db.py:629`
+- `C:\Users\Yuki\Documents\Lexicore\engine\learning\db.py:734`
+- `C:\Users\Yuki\Documents\Lexicore\engine\learning\db.py:828`
+- `C:\Users\Yuki\Documents\Lexicore\engine\learning\db.py:991`
+
+Exact fixes applied:
+
+```python
+_PROFILE_DEFAULTS: dict[str, str] = {
+    "name": "Learner",
+    "display_name": "Learner",
+    ...
+}
+
+def get_profile(self) -> dict[str, str]:
+    ...
+    if profile.get("name") and not profile.get("display_name"):
+        profile["display_name"] = profile["name"]
+    elif profile.get("display_name") and not profile.get("name"):
+        profile["name"] = profile["display_name"]
+
+def set_profile(self, key: str, value: str) -> None:
+    updates = {key: value}
+    if key == "name":
+        updates["display_name"] = value
+    elif key == "display_name":
+        updates["name"] = value
+```
+
+```python
+def claim_daily_login(self) -> bool:
+    today = date.today().isoformat()
+    profile = self.get_profile()
+    if profile.get("last_daily_login_award") == today:
+        return False
+    self.set_profile("last_daily_login_award", today)
+    return True
+```
+
+```python
+ACHIEVEMENTS = {
+    "first_lookup": {...},
+    "collector_10": {...},
+    "quiz_rookie": {...},
+    "perfect_mind": {...},
+    "streak_guardian": {...},
+    "pet_keeper": {...},
+    "mastery_bronze": {...},
+}
+
+def get_achievements(self) -> list[dict[str, Any]]:
+    ...
+```
+
+Behavior restored:
+- `name` and `display_name` now stay mirrored.
+- quiz history now returns `created_at` aliasing `taken_at` for the Flutter history page.
+- daily login can only be claimed once per calendar day.
+- v6 achievement badges now persist unlock state in SQLite via `achievement_unlocks`.
+- `increment_quest(action, amount=1)` now supports multi-increment actions like quiz correct counts.
+
+**Step 4: Fixed the FastAPI contract regressions**
+
+Modified file:
+- `C:\Users\Yuki\Documents\Lexicore\engine\main.py:213`
+- `C:\Users\Yuki\Documents\Lexicore\engine\main.py:275`
+- `C:\Users\Yuki\Documents\Lexicore\engine\main.py:738`
+- `C:\Users\Yuki\Documents\Lexicore\engine\main.py:777`
+- `C:\Users\Yuki\Documents\Lexicore\engine\main.py:1225`
+- `C:\Users\Yuki\Documents\Lexicore\engine\main.py:1278`
+- `C:\Users\Yuki\Documents\Lexicore\engine\main.py:1293`
+
+Exact fixes applied:
+
+```python
+cached = engine.cache.get(q.lower())
+if cached is not None:
+    engine.db.log_search(q)
+    ...
+```
+
+```python
+async def api_autocomplete(..., online: bool = Query(False)):
+    results = engine.trie.autocomplete(prefix, limit)
+    if online and len(results) < 5:
+        ...
+```
+
+```python
+valid_word_defs = [
+    item for item in word_defs
+    if item.get("definition") and item["definition"].strip()
+]
+if len(valid_word_defs) < 4:
+    return JSONResponse(
+        {"error": "Need at least 4 words with definitions to generate a quiz"},
+        status_code=400,
+    )
+```
+
+```python
+quiz_xp = calculate_award("quiz_correct", streak) * correct
+perfect_bonus = (
+    calculate_award("quiz_perfect", streak)
+    if total > 0 and correct == total
+    else 0
+)
+awarded = quiz_xp + perfect_bonus
+if awarded > 0:
+    engine.db.add_exp(awarded, words_learned=correct)
+
+completed_quests = []
+if total > 0:
+    completed_quests.extend(engine.db.increment_quest("quiz"))
+if correct > 0:
+    completed_quests.extend(engine.db.increment_quest("quiz_correct", correct))
+```
+
+```python
+if action == "daily_login" and not engine.db.claim_daily_login():
+    total_xp = engine.db.get_total_exp()
+    return JSONResponse({
+        "awarded": 0,
+        "quest_bonus": 0,
+        "completed_quests": [],
+        "already_claimed": True,
+        "total_xp": total_xp,
+        **xp_progress(total_xp),
+    })
+```
+
+```python
+@app.get("/api/achievements")
+async def api_get_achievements():
+    return JSONResponse({"achievements": engine.db.get_achievements()})
+```
+
+Also removed the duplicate/broken `_load_api_key()` definition and kept the safe ASCII-warning version:
+
+```python
+if not _os.path.exists(config_path):
+    print("[WARN] AI config not found; AI chat features are disabled.")
+    return ""
+```
+
+**Step 5: Fixed the Flutter app state mismatches**
+
+Modified files:
+- `C:\Users\Yuki\Documents\Lexicore\ui\lib\services\engine_service.dart:43`
+- `C:\Users\Yuki\Documents\Lexicore\ui\lib\services\engine_service.dart:45`
+- `C:\Users\Yuki\Documents\Lexicore\ui\lib\services\engine_service.dart:358`
+- `C:\Users\Yuki\Documents\Lexicore\ui\lib\services\engine_service.dart:655`
+- `C:\Users\Yuki\Documents\Lexicore\ui\lib\services\engine_service.dart:685`
+- `C:\Users\Yuki\Documents\Lexicore\ui\lib\main.dart:117`
+- `C:\Users\Yuki\Documents\Lexicore\ui\lib\pages\home_page.dart:69`
+- `C:\Users\Yuki\Documents\Lexicore\ui\lib\pages\dictionary_page.dart:101`
+- `C:\Users\Yuki\Documents\Lexicore\ui\lib\pages\quiz_page.dart:98`
+- `C:\Users\Yuki\Documents\Lexicore\ui\lib\pages\quiz_page.dart:838`
+- `C:\Users\Yuki\Documents\Lexicore\ui\lib\pages\performance_page.dart:60`
+- `C:\Users\Yuki\Documents\Lexicore\ui\lib\pages\performance_page.dart:78`
+- `C:\Users\Yuki\Documents\Lexicore\ui\lib\pages\performance_page.dart:501`
+
+Exact fixes applied:
+
+```dart
+final _progressController = StreamController<DateTime>.broadcast();
+Stream<DateTime> get progressStream => _progressController.stream;
+
+void notifyProgressChanged() {
+  if (!_progressController.isClosed) {
+    _progressController.add(DateTime.now());
+  }
+}
+```
+
+```dart
+if (resp.statusCode == 200) {
+  notifyProgressChanged();
+}
+```
+
+```dart
+_progressSubscription = _engine.progressStream.listen((_) {
+  _loadPetData();
+});
+```
+
+```dart
+_userName =
+    profile['name']?.toString() ??
+    profile['display_name']?.toString() ??
+    'Learner';
+```
+
+```dart
+if (!searchResult.found) {
+  searchResult = await _engine.searchOnline(word);
+}
+```
+
+```dart
+final result = await _engine.submitQuiz(...);
+final newPets = List<String>.from(result?['new_pets_unlocked'] ?? const []);
+```
+
+```dart
+final rawDate = (h['taken_at'] ?? h['created_at'])?.toString() ?? '';
+final date = rawDate.length >= 16 ? rawDate.substring(0, 16) : rawDate;
+```
+
+UI outcome:
+- sidebar XP / level / pet state now refreshes live after save, search, quiz, and daily login XP events.
+- quiz page now shows new pet unlocks from the submit response instead of a second empty check.
+- dictionary page now truly uses the full fallback chain.
+- performance page now renders the new v6 achievement badges.
+
+**Step 6: Rebuilt the installer and launch path for clean installs**
+
+Modified files:
+- `C:\Users\Yuki\Documents\Lexicore\installer\lexicore_setup.iss:9`
+- `C:\Users\Yuki\Documents\Lexicore\installer\lexicore_setup.iss:51`
+- `C:\Users\Yuki\Documents\Lexicore\installer\lexicore_setup.iss:92`
+- `C:\Users\Yuki\Documents\Lexicore\installer\lexicore_setup.iss:99`
+- `C:\Users\Yuki\Documents\Lexicore\installer\lexicore_setup.iss:290`
+- `C:\Users\Yuki\Documents\Lexicore\installer\lexicore_setup.iss:311`
+- `C:\Users\Yuki\Documents\Lexicore\installer\lexicore_setup.iss:539`
+- `C:\Users\Yuki\Documents\Lexicore\installer\LexiCore.bat:6`
+- `C:\Users\Yuki\Documents\Lexicore\installer\LexiCore.bat:29`
+- `C:\Users\Yuki\Documents\Lexicore\installer\LexiCore.bat:47`
+- `C:\Users\Yuki\Documents\Lexicore\installer\LexiCore.vbs:6`
+- `C:\Users\Yuki\Documents\Lexicore\installer\LexiCore.vbs:42`
+- `C:\Users\Yuki\Documents\Lexicore\installer\LexiCore.vbs:58`
+- `C:\Users\Yuki\Documents\Lexicore\installer\LexiCore_UI.zip`
+
+Exact installer fixes:
+
+```pascal
+Source: "LexiCore_UI.zip"; Flags: dontcopy
+
+procedure FailInstall(Msg: String);
+...
+function DetectPythonLauncher(): String;
+...
+procedure CleanOldInstall();
+...
+RunCmd('cmd.exe', '/c ' + PythonLauncher + ' -m venv "' + AppDir + '\.venv"', AppDir, ResultCode);
+RunCmd('cmd.exe', '/c "' + VenvPython + '" -m pip install --disable-pip-version-check -r "' + AppDir + '\requirements.txt"', AppDir, ResultCode);
+RunCmd('cmd.exe', '/c "' + VenvPython + '" -m engine.data.builder "' + AppDir + '\scripts\sample_dictionary.json"', AppDir, ResultCode);
+ExtractTemporaryFile('LexiCore_UI.zip');
+```
+
+```batch
+set "PYTHON_EXE=%~dp0.venv\Scripts\python.exe"
+set "UI_EXE=%~dp0ui\lexicore_ui.exe"
+curl -fsS -o nul http://127.0.0.1:8741/api/stats >nul 2>&1
+start "" /b cmd /c "\"%PYTHON_EXE%\" -m engine.main 1>>\"%~dp0data\launcher-backend.out.log\" 2>>\"%~dp0data\launcher-backend.err.log\""
+start "" "%UI_EXE%"
+```
+
+```vbscript
+PythonExe = ScriptDir & "\.venv\Scripts\python.exe"
+UiExe = ScriptDir & "\ui\lexicore_ui.exe"
+DataDir = ScriptDir & "\data"
+WshShell.Run "cmd.exe /c """ & PythonExe & """ -m engine.main 1>>""" & DataDir & "\launcher-backend.out.log"" 2>>""" & DataDir & "\launcher-backend.err.log""", 0, False
+WshShell.Run """" & UiExe & """", 1, False
+```
+
+Installer behavior changed from:
+- partial cleanup + global `pip install` + broken release download + silent warnings
+
+to:
+- full app-tree cleanup
+- isolated `.venv`
+- hard failure on Python/bootstrap errors
+- bundled prebuilt Windows UI
+- prebuilt sample dictionary during setup
+
+**Step 7: Fixed the dependency metadata and docs**
+
+Modified files:
+- `C:\Users\Yuki\Documents\Lexicore\requirements.txt:12`
+- `C:\Users\Yuki\Documents\Lexicore\requirements-dev.txt:1`
+- `C:\Users\Yuki\Documents\Lexicore\pyproject.toml:7`
+- `C:\Users\Yuki\Documents\Lexicore\pyproject.toml:27`
+- `C:\Users\Yuki\Documents\Lexicore\pyproject.toml:37`
+- `C:\Users\Yuki\Documents\Lexicore\README.md:1`
+- `C:\Users\Yuki\Documents\Lexicore\README.md:59`
+- `C:\Users\Yuki\Documents\Lexicore\README.md:178`
+- `C:\Users\Yuki\Documents\Lexicore\CHANGELOG.md:7`
+- `C:\Users\Yuki\Documents\Lexicore\CHANGELOG.md:31`
+
+Key metadata changes:
+
+```text
+requirements.txt
+- removed PyAudio from core runtime
+- removed vosk from core runtime
++ added python-multipart>=0.0.9
+```
+
+```toml
+version = "5.5.1"
+
+speech = [
+    "vosk>=0.3.45",
+    "PyAudio>=0.2.14",
+]
+```
+
+```markdown
+README.md
+- bumped repo banner to v5.5.1
+- documented Achievement badges
+- documented optional speech install path
+
+CHANGELOG.md
+- added [5.5.1] entry for fresh install recovery + v6 badge backport
+```
+
+**Step 8: Added fresh-install regression tests**
+
+Added file:
+- `C:\Users\Yuki\Documents\Lexicore\engine\tests\test_fresh_install.py:44`
+- `C:\Users\Yuki\Documents\Lexicore\engine\tests\test_fresh_install.py:74`
+- `C:\Users\Yuki\Documents\Lexicore\engine\tests\test_fresh_install.py:133`
+- `C:\Users\Yuki\Documents\Lexicore\engine\tests\test_fresh_install.py:145`
+
+Tests added:
+- `test_daily_login_awards_only_once_per_day`
+- `test_quiz_submit_awards_xp_updates_quests_and_history`
+- `test_achievements_unlock_from_first_search`
+- `test_quiz_generation_from_custom_words_requires_real_definitions`
+
+**Step 9: Ran verification and fixed two last-mile regressions**
+
+Command run:
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest engine\tests -q
+```
+
+First failing run:
+
+```text
+FAILED engine\tests\test_api.py::test_autocomplete_performance
+E assert 1193.455 < 10.0
+
+FAILED engine\tests\test_fresh_install.py::test_achievements_unlock_from_first_search
+E assert False is True
+```
+
+Root causes:
+- autocomplete endpoint was doing online fallback by default, which destroyed the local performance budget.
+- cached exact searches did not call `engine.db.log_search(q)`, so history/achievements did not update for cache hits.
+
+Fixes applied:
+- made Datamuse autocomplete fallback opt-in via `online: bool = Query(False)` in `engine/main.py:275`
+- added `engine.db.log_search(q)` to the cached search path in `engine/main.py:213`
+
+Second run:
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest engine\tests -q
+```
+
+Result:
+
+```text
+.......................................                                  [100%]
+39 passed in 1.29s
+```
+
+**Step 10: Ran a manual clean-install smoke test**
+
+Clean temp install root:
+
+```text
+C:\Users\Yuki\Documents\Lexicore\_fresh_install_smoke
+```
+
+Commands run:
+
+```powershell
+robocopy engine C:\Users\Yuki\Documents\Lexicore\_fresh_install_smoke\engine /E /NFL /NDL /NJH /NJS /NP
+robocopy scripts C:\Users\Yuki\Documents\Lexicore\_fresh_install_smoke\scripts /E /NFL /NDL /NJH /NJS /NP
+Copy-Item requirements.txt C:\Users\Yuki\Documents\Lexicore\_fresh_install_smoke\requirements.txt
+Copy-Item installer\LexiCore.bat C:\Users\Yuki\Documents\Lexicore\_fresh_install_smoke\LexiCore.bat
+Copy-Item installer\LexiCore.vbs C:\Users\Yuki\Documents\Lexicore\_fresh_install_smoke\LexiCore.vbs
+tar -xf installer\LexiCore_UI.zip -C C:\Users\Yuki\Documents\Lexicore\_fresh_install_smoke\ui
+py -3 -m venv C:\Users\Yuki\Documents\Lexicore\_fresh_install_smoke\.venv
+C:\Users\Yuki\Documents\Lexicore\_fresh_install_smoke\.venv\Scripts\python.exe -m pip install -r C:\Users\Yuki\Documents\Lexicore\_fresh_install_smoke\requirements.txt
+C:\Users\Yuki\Documents\Lexicore\_fresh_install_smoke\.venv\Scripts\python.exe -m engine.data.builder C:\Users\Yuki\Documents\Lexicore\_fresh_install_smoke\scripts\sample_dictionary.json
+```
+
+Dictionary build output:
+
+```text
+[*] Loading sample_dictionary.json ...
+[*] Processing 20 words ...
+[OK] Built index.data  (20 records)
+[OK] Built meaning.bin (12,497 bytes)
+[OK] Completed in 0.00s
+```
+
+Backend smoke run:
+
+```text
+[WARN] AI config not found; AI chat features are disabled.
+[OK] Loaded 20 words in 0.01s
+    Trie: 20 | Bloom: OK | Inverted Index: 419 terms
+```
+
+HTTP checks performed:
+
+```powershell
+Invoke-WebRequest http://127.0.0.1:8741/api/stats
+Invoke-WebRequest http://127.0.0.1:8741/api/achievements
+Invoke-WebRequest http://127.0.0.1:8741/api/import/files
+curl.exe -s -X POST -F "file=@C:\Users\Yuki\Documents\Lexicore\_fresh_install_smoke\data\import-smoke.txt" http://127.0.0.1:8741/api/import/file
+```
+
+API results:
+
+```text
+GET /api/stats          -> 200
+GET /api/achievements   -> 200
+GET /api/import/files   -> 200 body: {"files":[]}
+POST /api/import/file   -> 200 body: {"file_id":1,"filename":"import-smoke.txt","words_imported":4}
+```
+
+UI smoke run:
+
+```text
+Started: C:\Users\Yuki\Documents\Lexicore\_fresh_install_smoke\ui\lexicore_ui.exe
+Process: lexicore_ui
+Window title: LexiCore
+```
+
+**Step 11: Recorded the code commit**
+
+Command run:
+
+```powershell
+git commit -m "fix: restore fresh install flow and learning progress"
+```
+
+Result:
+
+```text
+[main e32f69d] fix: restore fresh install flow and learning progress
+18 files changed, 891 insertions(+), 159 deletions(-)
+create mode 100644 engine/tests/test_fresh_install.py
+create mode 100644 installer/LexiCore_UI.zip
+create mode 100644 requirements-dev.txt
+```
+
+**Step 12: Attempted GitHub push and captured the blocker**
+
+Commands run:
+
+```powershell
+git push origin main
+git ls-remote --heads origin main
+Get-CimInstance Win32_Process | Where-Object { $_.Name -like 'git*' } | Select-Object ProcessId, Name, CommandLine
+$env:GCM_INTERACTIVE='never'; $env:GIT_TERMINAL_PROMPT='0'; git push origin main
+```
+
+Observed state:
+
+```text
+git push was hanging inside:
+git-credential-manager get
+```
+
+Definitive non-interactive failure:
+
+```text
+fatal: Cannot prompt because user interactivity has been disabled.
+fatal: could not read Username for 'https://github.com': terminal prompts disabled
+```
+
+Git state at the end of this response:
+
+```text
+HEAD commit: e32f69d8cf9fef2f83079bdaf0bf307ac7220897
+Local branch: main...origin/main [ahead 1]
+Remote main:  4ab13d7773b7f7da6c894da9ddd99b103c03fa4d
+```
+
+Status:
+- all code changes completed locally
+- full backend test suite passed
+- manual fresh-install smoke run passed
+- GitHub push blocked by missing interactive credentials for `https://github.com/yuki-20/Lexi-Core`
+
+---
+
 ## Session — 2026-03-07 23:37
 
 ### 🧑 Prompt
