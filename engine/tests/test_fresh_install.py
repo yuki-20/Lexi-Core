@@ -3,6 +3,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
+import engine.main as main_module
 from engine.data.builder import build
 from engine.learning.db import UserDB
 from engine.learning.sm2 import SM2Scheduler
@@ -158,3 +159,29 @@ def test_quiz_generation_from_custom_words_requires_real_definitions(isolated_cl
 
     assert resp.status_code == 400
     assert "definitions" in resp.json()["error"]
+
+
+def test_ai_chat_returns_clear_error_without_api_key(isolated_client, monkeypatch):
+    monkeypatch.setattr(main_module, "_FPT_API_KEY", "")
+
+    resp = isolated_client.post(
+        "/api/ai/chat",
+        json={"messages": [{"role": "user", "content": "Hello"}]},
+    )
+
+    assert resp.status_code == 503
+    assert "not configured" in resp.json()["error"].lower()
+
+
+def test_ai_chat_stream_returns_sse_error_without_api_key(isolated_client, monkeypatch):
+    monkeypatch.setattr(main_module, "_FPT_API_KEY", "")
+
+    with isolated_client.stream(
+        "POST",
+        "/api/ai/chat/stream",
+        json={"messages": [{"role": "user", "content": "Hello"}]},
+    ) as resp:
+        lines = list(resp.iter_lines())
+
+    assert resp.status_code == 503
+    assert any("not configured" in line.lower() for line in lines if isinstance(line, str))

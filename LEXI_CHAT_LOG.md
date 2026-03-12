@@ -4,6 +4,54 @@ A chronological log of all prompts and responses between the user and Antigravit
 
 ---
 
+### 2026-03-13 - AI chat missing-key regression fix
+
+User report:
+- Running app succeeded, but Lexi-AI surfaced `Error: Illegal header value b'Bearer '`.
+- User also asked for GitHub login so fixes can be pushed after verification.
+
+Investigation:
+- Searched backend and found the only `Bearer` header construction in [engine/main.py](/c:/Users/Yuki/Documents/Lexicore/engine/main.py) inside `/api/ai/chat` and `/api/ai/chat/stream`.
+- `_load_api_key()` already returned `""` when `engine/ai_config.json` was missing or decryption failed, but the chat endpoints still sent `Authorization: Bearer ` to `httpx`.
+- Confirmed local Git state:
+  - `origin`: `https://github.com/yuki-20/Lexi-Core`
+  - `credential.helper=manager`
+  - `gh` CLI not installed
+  - Git Credential Manager available via `git credential-manager`
+
+Implementation:
+- Updated [engine/main.py](/c:/Users/Yuki/Documents/Lexicore/engine/main.py):
+  - trimmed decrypted API key with `.strip()`
+  - added `_ai_config_error()` helper
+  - `/api/ai/chat` now returns HTTP `503` with a clear config error when the API key is blank
+  - `/api/ai/chat/stream` now returns SSE error event with HTTP `503` instead of triggering invalid-header failure
+- Updated [engine/tests/test_fresh_install.py](/c:/Users/Yuki/Documents/Lexicore/engine/tests/test_fresh_install.py):
+  - added non-stream regression test for blank AI key
+  - added stream regression test for blank AI key
+
+Verification:
+- Targeted test pass:
+  - `.\.venv\Scripts\python.exe -m pytest engine\tests\test_fresh_install.py -q`
+  - result: `7 passed in 1.04s`
+- Full backend test pass:
+  - `.\.venv\Scripts\python.exe -m pytest engine\tests -q`
+  - result: `41 passed in 1.24s`
+- Restarted live backend from repo `.venv` and verified:
+  - `/api/stats` returned ready status
+  - `/api/ai/chat` returned HTTP `503`
+  - `/api/ai/chat/stream` returned:
+    - `data: {"type": "error", "content": "AI chat is not configured on this installation. Add a valid API key in engine/ai_config.json."}`
+- Windows UI stayed running during backend restart:
+  - process `lexicore_ui`
+  - window title `LexiCore`
+
+Git auth follow-up:
+- Resolved available safe login path:
+  - `git credential-manager github login --device --username yuki-20`
+  - alternative browser flow:
+    - `git credential-manager github login --web --username yuki-20`
+- Push still pending until GitHub authentication completes in this environment.
+
 ## Session — 2026-03-13 01:46
 
 ### 🧑 Prompt

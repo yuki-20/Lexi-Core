@@ -1302,13 +1302,19 @@ def _load_api_key() -> str:
             cfg = _json_mod.load(f)
         dk = _hl.pbkdf2_hmac("sha256", admin_pw.encode(), b"LexiCoreAI_Salt", 100_000)
         key = _b64.urlsafe_b64encode(dk)
-        return _Fernet(key).decrypt(cfg["encrypted_api_key"].encode()).decode()
+        return _Fernet(key).decrypt(cfg["encrypted_api_key"].encode()).decode().strip()
     except Exception as e:
         print(f"[WARN] Failed to decrypt API key: {e}")
         return ""
 
 
 _FPT_API_KEY = _load_api_key()
+
+
+def _ai_config_error() -> str | None:
+    if _FPT_API_KEY.strip():
+        return None
+    return "AI chat is not configured on this installation. Add a valid API key in engine/ai_config.json."
 
 
 class AiChatRequest(BaseModel):
@@ -1502,6 +1508,9 @@ def _inject_images(messages: list[dict], images: list[str] | None, model: str) -
 async def api_ai_chat(req: AiChatRequest):
     """Proxy chat request to FPT AI Factory with CoT extraction."""
     import httpx
+    ai_error = _ai_config_error()
+    if ai_error:
+        return JSONResponse({"error": ai_error}, status_code=503)
 
     # Web search if enabled
     search_text = ""
@@ -1566,6 +1575,17 @@ async def api_ai_chat_stream(req: AiChatRequest):
     import httpx
     from starlette.responses import StreamingResponse
     import json as _sj
+
+    ai_error = _ai_config_error()
+    if ai_error:
+        async def disabled_event_generator():
+            yield f"data: {_sj.dumps({'type': 'error', 'content': ai_error})}\n\n"
+
+        return StreamingResponse(
+            disabled_event_generator(),
+            media_type="text/event-stream",
+            status_code=503,
+        )
 
     # Web search if enabled
     search_text = ""
