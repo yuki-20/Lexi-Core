@@ -24,6 +24,7 @@ from pathlib import Path
 from typing import Any, Generator
 
 from engine.config import DB_PATH
+from engine.learning.xp_engine import word_mastery_tier
 
 
 _SCHEMA = """
@@ -148,6 +149,11 @@ CREATE TABLE IF NOT EXISTS quest_progress (
     PRIMARY KEY (quest_id, period)
 );
 
+CREATE TABLE IF NOT EXISTS achievement_unlocks (
+    achievement_id TEXT PRIMARY KEY,
+    unlocked_at    TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 -- ── v5.3 — AI Conversations ─────────────────────────────────────
 
 CREATE TABLE IF NOT EXISTS ai_conversations (
@@ -168,6 +174,18 @@ CREATE INDEX IF NOT EXISTS idx_quiz_deck ON quiz_results(deck_id);
 CREATE INDEX IF NOT EXISTS idx_answers_quiz ON quiz_answers(quiz_id);
 CREATE INDEX IF NOT EXISTS idx_ai_conv_date ON ai_conversations(updated_at DESC);
 """
+
+_PROFILE_DEFAULTS: dict[str, str] = {
+    "name": "Learner",
+    "display_name": "Learner",
+    "avatar_emoji": "\U0001F9D1\u200D\U0001F393",
+    "avatar_path": "",
+    "cover_path": "",
+    "daily_goal": "10",
+    "notifications": "true",
+    "custom_instructions": "",
+    "cover_color": "",
+}
 
 
 class UserDB:
@@ -449,19 +467,6 @@ class UserDB:
                 "VALUES (?, ?, ?, ?, ?)",
                 (deck_id, total_q, correct, score_pct, duration_s),
             )
-            # Award EXP inline (avoid nested cursor deadlock)
-            exp = correct * 10
-            if score_pct >= 100.0:
-                exp += 50  # perfect bonus
-            today = date.today().isoformat()
-            cur.execute(
-                "INSERT INTO streaks (date_key, words_learned, exp_earned) "
-                "VALUES (?, ?, ?) "
-                "ON CONFLICT(date_key) DO UPDATE SET "
-                "words_learned = words_learned + excluded.words_learned, "
-                "exp_earned = exp_earned + excluded.exp_earned",
-                (today, correct, exp),
-            )
             return cur.lastrowid  # type: ignore
 
     def add_quiz_answer(self, quiz_id: int, word: str,
@@ -479,7 +484,7 @@ class UserDB:
     def get_quiz_history(self, limit: int = 20) -> list[dict[str, Any]]:
         with self._cursor() as cur:
             cur.execute(
-                "SELECT qr.*, fd.name as deck_name "
+                "SELECT qr.*, qr.taken_at as created_at, fd.name as deck_name "
                 "FROM quiz_results qr "
                 "LEFT JOIN flashcard_decks fd ON qr.deck_id = fd.id "
                 "ORDER BY qr.taken_at DESC LIMIT ?",
@@ -592,18 +597,42 @@ class UserDB:
     def get_profile(self) -> dict[str, str]:
         with self._cursor() as cur:
             cur.execute("SELECT key, value FROM user_profile")
-            return {row["key"]: row["value"] for row in cur.fetchall()}
+            profile = _PROFILE_DEFAULTS | {
+                row["key"]: row["value"] for row in cur.fetchall()
+            }
+
+        if profile.get("name") and not profile.get("display_name"):
+            profile["display_name"] = profile["name"]
+        elif profile.get("display_name") and not profile.get("name"):
+            profile["name"] = profile["display_name"]
+
+        return profile
 
     def set_profile(self, key: str, value: str) -> None:
+        updates = {key: value}
+        if key == "name":
+            updates["display_name"] = value
+        elif key == "display_name":
+            updates["name"] = value
+
         with self._cursor() as cur:
-            cur.execute(
-                "INSERT OR REPLACE INTO user_profile (key, value) VALUES (?, ?)",
-                (key, value),
-            )
+            for update_key, update_value in updates.items():
+                cur.execute(
+                    "INSERT OR REPLACE INTO user_profile (key, value) VALUES (?, ?)",
+                    (update_key, update_value),
+                )
 
     def get_display_name(self) -> str:
         profile = self.get_profile()
-        return profile.get("display_name", "Learner")
+        return profile.get("name") or profile.get("display_name", "Learner")
+
+    def claim_daily_login(self) -> bool:
+        today = date.today().isoformat()
+        profile = self.get_profile()
+        if profile.get("last_daily_login_award") == today:
+            return False
+        self.set_profile("last_daily_login_award", today)
+        return True
 
     # ══════════════════════════════════════════════════════════════════
     # v3.0 — PET UNLOCKS
@@ -701,6 +730,148 @@ class UserDB:
             "active_days": active_days,
             "total_exp": self.get_total_exp(),
         }
+
+    ACHIEVEMENTS = {
+        "first_lookup": {
+            "name": "First Lookup",
+            "desc": "Search for your first word",
+            "target": 1,
+            "metric": "searches",
+            "icon": "search",
+            "color": "#40C4FF",
+        },
+        "collector_10": {
+            "name": "Collector",
+            "desc": "Save 10 words",
+            "target": 10,
+            "metric": "saved_words",
+            "icon": "bookmark",
+            "color": "#69F0AE",
+        },
+        "quiz_rookie": {
+            "name": "Quiz Rookie",
+            "desc": "Complete 5 quizzes",
+            "target": 5,
+            "metric": "quizzes_taken",
+            "icon": "quiz",
+            "color": "#FF4081",
+        },
+        "perfect_mind": {
+            "name": "Perfect Mind",
+            "desc": "Earn 3 perfect quiz scores",
+            "target": 3,
+            "metric": "perfect_quizzes",
+            "icon": "workspace_premium",
+            "color": "#FFD54F",
+        },
+        "streak_guardian": {
+            "name": "Streak Guardian",
+            "desc": "Reach a 7-day streak",
+            "target": 7,
+            "metric": "streak_days",
+            "icon": "local_fire_department",
+            "color": "#FF8A65",
+        },
+        "pet_keeper": {
+            "name": "Pet Keeper",
+            "desc": "Unlock your first pet companion",
+            "target": 1,
+            "metric": "unlocked_pets",
+            "icon": "pets",
+            "color": "#B388FF",
+        },
+        "mastery_bronze": {
+            "name": "Word Mastery",
+            "desc": "Reach bronze quiz mastery on any word",
+            "target": 3,
+            "metric": "max_word_mastery",
+            "icon": "military_tech",
+            "color": "#CD7F32",
+        },
+    }
+
+    def _achievement_metrics(self) -> dict[str, Any]:
+        with self._cursor() as cur:
+            cur.execute("SELECT COUNT(*) AS total FROM search_history")
+            searches = cur.fetchone()["total"]
+
+            cur.execute("SELECT COUNT(*) AS total FROM saved_words")
+            saved_words = cur.fetchone()["total"]
+
+            cur.execute("SELECT COUNT(*) AS total FROM quiz_results")
+            quizzes_taken = cur.fetchone()["total"]
+
+            cur.execute("SELECT COUNT(*) AS total FROM pet_unlocks")
+            unlocked_pets = cur.fetchone()["total"]
+
+            cur.execute(
+                "SELECT COALESCE(MAX(correct_count), 0) AS max_correct "
+                "FROM ("
+                "  SELECT SUM(CASE WHEN is_correct = 1 THEN 1 ELSE 0 END) AS correct_count "
+                "  FROM quiz_answers GROUP BY word"
+                ")"
+            )
+            max_word_mastery = cur.fetchone()["max_correct"]
+
+        mastery = word_mastery_tier(max_word_mastery)
+        return {
+            "searches": searches,
+            "saved_words": saved_words,
+            "quizzes_taken": quizzes_taken,
+            "perfect_quizzes": self.get_perfect_quiz_count(),
+            "streak_days": self.get_streak_days(),
+            "unlocked_pets": unlocked_pets,
+            "max_word_mastery": max_word_mastery,
+            "mastery_tier": mastery["tier"] if mastery else None,
+        }
+
+    def get_achievements(self) -> list[dict[str, Any]]:
+        metrics = self._achievement_metrics()
+
+        with self._cursor() as cur:
+            cur.execute(
+                "SELECT achievement_id, unlocked_at FROM achievement_unlocks"
+            )
+            unlocked_at = {
+                row["achievement_id"]: row["unlocked_at"] for row in cur.fetchall()
+            }
+
+        to_insert = [
+            achievement_id
+            for achievement_id, info in self.ACHIEVEMENTS.items()
+            if metrics.get(info["metric"], 0) >= info["target"]
+            and achievement_id not in unlocked_at
+        ]
+
+        if to_insert:
+            with self._cursor() as cur:
+                cur.executemany(
+                    "INSERT OR IGNORE INTO achievement_unlocks (achievement_id) VALUES (?)",
+                    [(achievement_id,) for achievement_id in to_insert],
+                )
+                cur.execute(
+                    "SELECT achievement_id, unlocked_at FROM achievement_unlocks"
+                )
+                unlocked_at = {
+                    row["achievement_id"]: row["unlocked_at"] for row in cur.fetchall()
+                }
+
+        achievements = []
+        for achievement_id, info in self.ACHIEVEMENTS.items():
+            achievements.append({
+                "id": achievement_id,
+                **info,
+                "progress": min(metrics.get(info["metric"], 0), info["target"]),
+                "unlocked": achievement_id in unlocked_at,
+                "unlocked_at": unlocked_at.get(achievement_id),
+                "detail": (
+                    f"Highest mastery: {metrics['mastery_tier']}"
+                    if achievement_id == "mastery_bronze" and metrics.get("mastery_tier")
+                    else ""
+                ),
+            })
+
+        return achievements
 
     # ── Projects ─────────────────────────────────────────────────
 
@@ -817,22 +988,26 @@ class UserDB:
             })
         return result
 
-    def increment_quest(self, action: str) -> list[dict]:
+    def increment_quest(self, action: str, amount: int = 1) -> list[dict]:
         """Increment progress for all quests matching this action.
         Returns list of newly completed quests."""
+        if amount <= 0:
+            return []
+
         newly_completed = []
         for qid, info in self.QUESTS.items():
             if info["action"] != action:
                 continue
             period = self._quest_period(info["type"])
+            amount_to_add = min(amount, info["target"])
             with self._cursor() as cur:
                 # Upsert progress
                 cur.execute(
                     """INSERT INTO quest_progress (quest_id, period, progress, completed)
-                       VALUES (?, ?, 1, 0)
+                       VALUES (?, ?, ?, 0)
                        ON CONFLICT(quest_id, period) DO UPDATE
-                       SET progress = MIN(progress + 1, ?)""",
-                    (qid, period, info["target"])
+                       SET progress = MIN(progress + ?, ?)""",
+                    (qid, period, amount_to_add, amount_to_add, info["target"])
                 )
                 # Check if just completed
                 cur.execute(

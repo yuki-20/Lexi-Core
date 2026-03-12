@@ -39,6 +39,14 @@ class EngineService {
   WebSocketChannel? _ws;
   final _autocompleteController = StreamController<AutocompleteResult>.broadcast();
   Stream<AutocompleteResult> get autocompleteStream => _autocompleteController.stream;
+  final _progressController = StreamController<DateTime>.broadcast();
+  Stream<DateTime> get progressStream => _progressController.stream;
+
+  void notifyProgressChanged() {
+    if (!_progressController.isClosed) {
+      _progressController.add(DateTime.now());
+    }
+  }
 
   // ── WebSocket ──
   void connectWebSocket() {
@@ -362,7 +370,11 @@ class EngineService {
           'duration_s': durationS,
         }),
       ).timeout(const Duration(seconds: 5));
-      return jsonDecode(resp.body);
+      final data = Map<String, dynamic>.from(jsonDecode(resp.body));
+      if (resp.statusCode == 200) {
+        notifyProgressChanged();
+      }
+      return data;
     } catch (_) {
       return null;
     }
@@ -647,7 +659,11 @@ class EngineService {
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'action': action}),
       ).timeout(const Duration(seconds: 3));
-      return Map<String, dynamic>.from(jsonDecode(resp.body));
+      final data = Map<String, dynamic>.from(jsonDecode(resp.body));
+      if (resp.statusCode == 200 && (data['awarded'] ?? 0) != 0) {
+        notifyProgressChanged();
+      }
+      return data;
     } catch (_) {
       return {};
     }
@@ -661,6 +677,17 @@ class EngineService {
           .timeout(const Duration(seconds: 3));
       final data = jsonDecode(resp.body);
       return List<Map<String, dynamic>>.from(data['quests'] ?? []);
+    } catch (_) {
+      return [];
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> getAchievements() async {
+    try {
+      final resp = await http.get(Uri.parse('$_baseUrl/api/achievements'))
+          .timeout(const Duration(seconds: 3));
+      final data = jsonDecode(resp.body);
+      return List<Map<String, dynamic>>.from(data['achievements'] ?? []);
     } catch (_) {
       return [];
     }

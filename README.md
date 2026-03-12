@@ -1,4 +1,4 @@
-# 🌊 LexiCore Engine v5.5
+# 🌊 LexiCore Engine v5.5.1
 
 <div align="center">
 
@@ -56,6 +56,7 @@
 - **20 unique titles** — From "Novice" (Lv 1) → "Word Titan" (Lv 750) → "∞ Eternal Lexicon" (Lv 1000)
 - **Title progression** — Every 5 levels for first 30, then every 10 levels, with special milestones
 - **Daily quests** — Complete challenges for bonus XP
+- **Achievement badges** — Unlock milestone rewards for search, save, streak, quiz, pet, and mastery progress
 - **Streak system** with day-count tracking and XP multipliers (1.1× to 1.6×)
 - **Streak Pets** — Unlock virtual companions (Ember Fox, Volt Owl, Aqua Dragon, Prisma) at milestone streaks
 
@@ -160,7 +161,7 @@ LexiCore v5.5
 git clone https://github.com/yuki-20/Lexi-Core.git
 cd Lexi-Core
 
-# Install Python dependencies
+# Install runtime dependencies
 pip install -r requirements.txt
 
 # Build the dictionary from source JSON
@@ -172,6 +173,12 @@ python -m engine.encrypt_key
 # Start the API server
 python -m engine.main
 # Server runs on http://localhost:8741
+```
+
+Optional speech input dependencies:
+
+```bash
+pip install .[speech]
 ```
 
 ### Frontend Setup
@@ -387,7 +394,6 @@ All endpoints are available at `http://localhost:8741`.
 - [ ] **Theme editor** — User-customizable UI themes and accent colors
 - [ ] **Cloud sync** — Cross-device progress synchronization
 - [ ] **Leaderboard** — Compare XP and streaks with friends
-- [ ] **Achievement badges** — Unlock rewards for learning milestones
 - [ ] **Word games** — Crossword, word scramble, and hangman mini-games
 
 ---

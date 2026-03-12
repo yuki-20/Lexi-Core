@@ -93,16 +93,26 @@ class _QuizPageState extends State<QuizPage> {
     setState(() {
       _state = 'result';
     });
-    // Background: submit + check unlocks
+    // Background: submit and surface any newly unlocked pets
     try {
-      await _engine.submitQuiz(
+      final result = await _engine.submitQuiz(
         answers: _answers,
         durationS: _timer.elapsedMilliseconds / 1000,
       );
-      final newPets = await _engine.checkPetUnlocks();
+      final newPets = List<String>.from(result?['new_pets_unlocked'] ?? const []);
       if (newPets.isNotEmpty && mounted) {
+        const petNames = {
+          'ember_fox': 'Ember Fox',
+          'volt_owl': 'Volt Owl',
+          'aqua_dragon': 'Aqua Dragon',
+          'prisma': 'Prisma',
+        };
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('🎉 New pet unlocked: ${newPets.join(', ')}!')),
+          SnackBar(
+            content: Text(
+              'New pet unlocked: ${newPets.map((id) => petNames[id] ?? id).join(', ')}!',
+            ),
+          ),
         );
       }
     } catch (_) {}
@@ -825,7 +835,8 @@ class _QuizPageState extends State<QuizPage> {
                 final scorePct = (h['score_pct'] as num?)?.toDouble() ?? 0;
                 final correct = h['correct'] ?? 0;
                 final total = h['total_q'] ?? 0;
-                final date = h['created_at']?.toString().substring(0, 16) ?? '';
+                final rawDate = (h['taken_at'] ?? h['created_at'])?.toString() ?? '';
+                final date = rawDate.length >= 16 ? rawDate.substring(0, 16) : rawDate;
 
                 return Padding(
                   padding: const EdgeInsets.only(bottom: 8),

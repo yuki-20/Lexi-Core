@@ -4,6 +4,32 @@ All notable changes to LexiCore are documented in this file.
 
 ---
 
+## [5.5.1] — 2026-03-13
+
+### 🛠 Fresh Install Recovery
+
+- **Fixed Windows fresh installs** — installer now deletes the full previous app tree, rebuilds a local `.venv`, installs only supported runtime dependencies, and aborts on bootstrap failures instead of leaving a half-installed app behind
+- **Bundled Windows UI** — installer now ships with a local `LexiCore_UI.zip` payload instead of downloading the broken `LexiCore_UI.zip` release URL
+- **Sample dictionary prebuild** — installer now builds `data/index.data` and `data/meaning.bin` during setup so first launch is immediately usable
+- **Safe AI bootstrap** — missing `engine/ai_config.json` no longer crashes startup; AI chat is disabled cleanly with an ASCII-safe warning
+- **Runtime dependency fix** — added `python-multipart` for file upload endpoints and moved `vosk` / `PyAudio` out of core install requirements so normal Windows machines can install successfully
+
+### 🐛 Regression Fixes
+
+- **Quiz XP restored** — `POST /api/quiz/submit` now awards quiz XP again after the deadlock fix, including perfect-score bonus
+- **Quiz quests restored** — submitting a quiz now advances both `quiz_1` and `master_10` quest progress and grants quest bonus XP when completed
+- **Quiz history timestamps fixed** — history rows now expose both `taken_at` and `created_at` for the Flutter history view
+- **Daily login XP gated** — `daily_login` can only be claimed once per day on the backend, preventing duplicate XP from repeated launches
+- **Profile name sync fixed** — `name` and `display_name` now stay mirrored so Home, Welcome, and Settings show the same user name on a fresh database
+- **Dictionary fallback completed** — dictionary expansion now truly follows the documented chain: local binary → search → online → saved words
+- **Pet unlock toast fixed** — quiz results now surface newly unlocked pets from the submit response instead of re-checking after they were already unlocked
+- **Sidebar progress refresh fixed** — XP, level, and pet state now refresh in the shell when progress changes without requiring a full restart
+- **Custom-word quiz validation fixed** — quiz generation from imported/custom words now returns `400` unless at least 4 real definitions were found
+
+### ✨ v6 Backport
+
+- **Achievement badges** — added persistent unlock tracking plus `/api/achievements`, with badge cards now shown on the Performance page
+
 ## [5.5] — 2026-03-09
 
 ### ✨ New Features

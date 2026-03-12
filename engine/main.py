@@ -222,6 +222,7 @@ async def api_search_exact(q: str = Query(..., min_length=1)):
 
     cached = engine.cache.get(q.lower())
     if cached is not None:
+        engine.db.log_search(q)
         elapsed = round((time.perf_counter() - t0) * 1000, 3)
         return JSONResponse({
             "found": True,
@@ -274,12 +275,13 @@ async def api_search_fuzzy(q: str = Query(..., min_length=1)):
 async def api_autocomplete(
     prefix: str = Query(..., min_length=1),
     limit: int = Query(AUTOCOMPLETE_LIMIT, ge=1, le=50),
+    online: bool = Query(False),
 ):
     t0 = time.perf_counter()
     results = engine.trie.autocomplete(prefix, limit)
 
     # Online fallback via Datamuse when local results are sparse
-    if len(results) < 5:
+    if online and len(results) < 5:
         try:
             import httpx
             async with httpx.AsyncClient(timeout=2.0) as client:
@@ -756,13 +758,18 @@ async def api_generate_quiz_from_words(req: QuizFromWordsRequest):
                 pass
         word_defs.append({"word": w, "definition": definition})
 
-    if len(word_defs) < 4:
+    valid_word_defs = [
+        item for item in word_defs
+        if item.get("definition") and item["definition"].strip()
+    ]
+
+    if len(valid_word_defs) < 4:
         return JSONResponse(
-            {"error": "Need at least 4 words to generate a quiz"},
+            {"error": "Need at least 4 words with definitions to generate a quiz"},
             status_code=400,
         )
 
-    questions = engine.db.generate_quiz(word_defs, req.count)
+    questions = engine.db.generate_quiz(valid_word_defs, req.count)
     return JSONResponse({"questions": questions, "total": len(questions)})
 
 
@@ -787,6 +794,27 @@ async def api_submit_quiz(req: SubmitQuizRequest):
             answer.get("explanation"),
         )
 
+    streak = engine.db.get_streak_days()
+    quiz_xp = calculate_award("quiz_correct", streak) * correct
+    perfect_bonus = (
+        calculate_award("quiz_perfect", streak)
+        if total > 0 and correct == total
+        else 0
+    )
+    awarded = quiz_xp + perfect_bonus
+    if awarded > 0:
+        engine.db.add_exp(awarded, words_learned=correct)
+
+    completed_quests = []
+    if total > 0:
+        completed_quests.extend(engine.db.increment_quest("quiz"))
+    if correct > 0:
+        completed_quests.extend(engine.db.increment_quest("quiz_correct", correct))
+
+    quest_bonus = sum(q.get("xp", 0) for q in completed_quests)
+    if quest_bonus > 0:
+        engine.db.add_exp(quest_bonus)
+
     # Check for pet unlocks
     newly_eligible = engine.db.check_pet_eligibility()
     new_pets = []
@@ -794,12 +822,18 @@ async def api_submit_quiz(req: SubmitQuizRequest):
         if engine.db.unlock_pet(pet_id):
             new_pets.append(pet_id)
 
+    total_xp = engine.db.get_total_exp()
     return JSONResponse({
         "quiz_id": quiz_id,
         "correct": correct,
         "total": total,
         "score_pct": score_pct,
+        "xp_awarded": awarded,
+        "quest_bonus": quest_bonus,
+        "completed_quests": [q["id"] for q in completed_quests],
+        "total_xp": total_xp,
         "new_pets_unlocked": new_pets,
+        **xp_progress(total_xp),
     })
 
 
@@ -1190,6 +1224,18 @@ async def api_xp_status():
 @app.post("/api/xp/award")
 async def api_xp_award(req: dict):
     action = req.get("action", "")
+
+    if action == "daily_login" and not engine.db.claim_daily_login():
+        total_xp = engine.db.get_total_exp()
+        return JSONResponse({
+            "awarded": 0,
+            "quest_bonus": 0,
+            "completed_quests": [],
+            "already_claimed": True,
+            "total_xp": total_xp,
+            **xp_progress(total_xp),
+        })
+
     streak = engine.db.get_streak_days()
     amount = calculate_award(action, streak)
     if amount > 0:
@@ -1215,6 +1261,7 @@ async def api_xp_award(req: dict):
         "awarded": amount,
         "quest_bonus": quest_bonus,
         "completed_quests": [q["id"] for q in completed_quests],
+        "already_claimed": False,
         "total_xp": total_xp,
         **xp_progress(total_xp),
     })
@@ -1225,6 +1272,12 @@ async def api_get_quests():
     """Get all quests with current progress."""
     quests = engine.db.get_quest_progress()
     return JSONResponse({"quests": quests})
+
+
+@app.get("/api/achievements")
+async def api_get_achievements():
+    """Get v6 achievement badge progress."""
+    return JSONResponse({"achievements": engine.db.get_achievements()})
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -1241,14 +1294,17 @@ def _load_api_key() -> str:
     """Load and decrypt the API key from ai_config.json using LEXI_ADMIN_KEY."""
     admin_pw = _os.environ.get("LEXI_ADMIN_KEY", "LexiAdmin2026")
     config_path = _os.path.join(_os.path.dirname(__file__), "ai_config.json")
+    if not _os.path.exists(config_path):
+        print("[WARN] AI config not found; AI chat features are disabled.")
+        return ""
     try:
-        with open(config_path, "r") as f:
+        with open(config_path, "r", encoding="utf-8") as f:
             cfg = _json_mod.load(f)
         dk = _hl.pbkdf2_hmac("sha256", admin_pw.encode(), b"LexiCoreAI_Salt", 100_000)
         key = _b64.urlsafe_b64encode(dk)
         return _Fernet(key).decrypt(cfg["encrypted_api_key"].encode()).decode()
     except Exception as e:
-        print(f"⚠ Failed to decrypt API key: {e}")
+        print(f"[WARN] Failed to decrypt API key: {e}")
         return ""
 
 

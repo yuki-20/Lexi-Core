@@ -6,7 +6,7 @@
 ; ═══════════════════════════════════════════════════════════════
 
 #define MyAppName "LexiCore"
-#define MyAppVersion "5.5"
+#define MyAppVersion "5.5.1"
 #define MyAppPublisher "Pham Anh"
 #define MyAppURL "https://github.com/yuki-20/Lexi-Core"
 #define MyAppExeName "LexiCore.vbs"
@@ -32,7 +32,7 @@ SolidCompression=yes
 WizardStyle=modern
 PrivilegesRequired=admin
 UninstallDisplayName={#MyAppName}
-VersionInfoVersion={#MyAppVersion}.0.0
+VersionInfoVersion={#MyAppVersion}.0
 VersionInfoCompany={#MyAppPublisher}
 VersionInfoDescription={#MyAppName} — Offline-First Vocabulary Learning Platform
 VersionInfoCopyright=Copyright (C) 2026 {#MyAppPublisher}
@@ -48,6 +48,7 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 ; Launcher scripts — everything else is downloaded from GitHub
 Source: "LexiCore.vbs"; DestDir: "{app}"; Flags: ignoreversion
 Source: "LexiCore.bat"; DestDir: "{app}"; Flags: ignoreversion
+Source: "LexiCore_UI.zip"; Flags: dontcopy
 
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "wscript.exe"; Parameters: """{app}\LexiCore.vbs"""; WorkingDir: "{app}"; IconFilename: "{app}\ui\lexicore_ui.exe"; Comment: "Launch LexiCore"
@@ -69,6 +70,7 @@ var
   ModeCipherRadio: TNewRadioButton;
   OutputMemo: TNewMemo;
   SelectedMode: Integer;
+  InstallError: String;
 
 // ─── Utility: Log to tech/cipher output ───────────────────────
 procedure TechLog(Msg: String);
@@ -85,6 +87,27 @@ end;
 function RunCmd(Cmd, Params, WorkDir: String; var ExitCode: Integer): Boolean;
 begin
   Result := Exec(Cmd, Params, WorkDir, SW_HIDE, ewWaitUntilTerminated, ExitCode);
+end;
+
+procedure FailInstall(Msg: String);
+begin
+  InstallError := Msg;
+  TechLog('[ERROR] ' + Msg);
+  MsgBox(Msg, mbError, MB_OK);
+end;
+
+function DetectPythonLauncher(): String;
+var
+  ResultCode: Integer;
+begin
+  Result := '';
+  if RunCmd('cmd.exe', '/c py -3 --version >nul 2>&1', '', ResultCode) and (ResultCode = 0) then
+  begin
+    Result := 'py -3';
+    Exit;
+  end;
+  if RunCmd('cmd.exe', '/c python --version >nul 2>&1', '', ResultCode) and (ResultCode = 0) then
+    Result := 'python';
 end;
 
 // ─── Initialize wizard: Create mode selection page ────────────
@@ -265,27 +288,23 @@ end;
 
 // ─── Remove old installation ──────────────────────────────────
 procedure CleanOldInstall();
+var
+  ResultCode: Integer;
+  AppDir: String;
 begin
-  if DirExists(ExpandConstant('{app}\engine')) then
+  AppDir := ExpandConstant('{app}');
+  TechLog('[CLEAN] Stopping running LexiCore processes...');
+  Exec('cmd.exe', '/c taskkill /f /im lexicore_ui.exe 2>nul', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Exec('cmd.exe', '/c for /f "tokens=5" %a in (''netstat -aon ^| findstr :8741'') do taskkill /f /pid %a 2>nul', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Sleep(1000);
+
+  if DirExists(AppDir) then
   begin
-    TechLog('[CLEAN] Removing old engine files...');
-    DelTree(ExpandConstant('{app}\engine'), True, True, True);
+    TechLog('[CLEAN] Removing old installation tree...');
+    DelTree(AppDir, True, True, True);
   end;
-  if DirExists(ExpandConstant('{app}\ui')) then
-  begin
-    TechLog('[CLEAN] Removing old UI files...');
-    DelTree(ExpandConstant('{app}\ui'), True, True, True);
-  end;
-  if DirExists(ExpandConstant('{app}\scripts')) then
-  begin
-    TechLog('[CLEAN] Removing old scripts...');
-    DelTree(ExpandConstant('{app}\scripts'), True, True, True);
-  end;
-  if DirExists(ExpandConstant('{app}\data')) then
-  begin
-    TechLog('[CLEAN] Removing old user data (fresh install)...');
-    DelTree(ExpandConstant('{app}\data'), True, True, True);
-  end;
+
+  ForceDirectories(AppDir);
 end;
 
 // ─── Main install: Download from GitHub + setup ───────────────
@@ -293,11 +312,12 @@ procedure DoOnlineInstall();
 var
   ResultCode: Integer;
   AppDir, TempZip, TempExtract, SourceDir, TempUIZip: String;
-  PSCommand: String;
+  PythonLauncher, VenvPython: String;
 begin
+  InstallError := '';
   AppDir := ExpandConstant('{app}');
   TempZip := ExpandConstant('{tmp}\lexicore-main.zip');
-  TempUIZip := ExpandConstant('{tmp}\ui.zip');
+  TempUIZip := ExpandConstant('{tmp}\LexiCore_UI.zip');
   TempExtract := ExpandConstant('{tmp}\lexicore-extract');
 
   // Step 1: Clean old installation
@@ -317,14 +337,13 @@ begin
     '-L -o "' + TempZip + '" "{#MyRepoZip}" --ssl-no-revoke -s',
     '', ResultCode) then
   begin
-    MsgBox('Failed to download LexiCore. Please check your internet connection.', mbError, MB_OK);
+    FailInstall('Failed to download LexiCore. Please check your internet connection.');
     Exit;
   end;
-  
+
   if ResultCode <> 0 then
   begin
-    TechLog('  [ERROR] curl failed with code: ' + IntToStr(ResultCode));
-    MsgBox('Download failed (curl exit code: ' + IntToStr(ResultCode) + '). Check your internet connection.', mbError, MB_OK);
+    FailInstall('Download failed (curl exit code: ' + IntToStr(ResultCode) + '). Check your internet connection.');
     Exit;
   end;
   TechLog('  Download complete');
@@ -338,9 +357,19 @@ begin
   RunCmd(ExpandConstant('{sys}\tar.exe'),
     '-xf "' + TempZip + '" -C "' + TempExtract + '"',
     '', ResultCode);
+  if ResultCode <> 0 then
+  begin
+    FailInstall('Could not extract the LexiCore source archive.');
+    Exit;
+  end;
   TechLog('  Extraction complete (exit code: ' + IntToStr(ResultCode) + ')');
 
   SourceDir := TempExtract + '\Lexi-Core-main';
+  if not DirExists(SourceDir) then
+  begin
+    FailInstall('Downloaded archive did not contain the expected Lexi-Core-main folder.');
+    Exit;
+  end;
 
   // Step 4: Copy engine + support files using xcopy (works everywhere)
   ProgressPage.SetProgress(5, 10);
@@ -349,73 +378,106 @@ begin
 
   ForceDirectories(AppDir + '\engine');
   RunCmd('cmd.exe', '/c xcopy "' + SourceDir + '\engine" "' + AppDir + '\engine" /E /I /Y /Q', '', ResultCode);
+  if ResultCode > 1 then
+  begin
+    FailInstall('Failed to copy engine files into the installation directory.');
+    Exit;
+  end;
   TechLog('  Engine copied (exit code: ' + IntToStr(ResultCode) + ')');
 
   RunCmd('cmd.exe', '/c if exist "' + SourceDir + '\scripts" xcopy "' + SourceDir + '\scripts" "' + AppDir + '\scripts" /E /I /Y /Q', '', ResultCode);
-  RunCmd('cmd.exe', '/c if exist "' + SourceDir + '\data" xcopy "' + SourceDir + '\data" "' + AppDir + '\data" /E /I /Y /Q', '', ResultCode);
+  if ResultCode > 1 then
+  begin
+    FailInstall('Failed to copy supporting scripts into the installation directory.');
+    Exit;
+  end;
+  ForceDirectories(AppDir + '\data');
   RunCmd('cmd.exe', '/c if exist "' + SourceDir + '\requirements.txt" copy /Y "' + SourceDir + '\requirements.txt" "' + AppDir + '\requirements.txt"', '', ResultCode);
+  RunCmd('cmd.exe', '/c if exist "' + SourceDir + '\requirements-dev.txt" copy /Y "' + SourceDir + '\requirements-dev.txt" "' + AppDir + '\requirements-dev.txt"', '', ResultCode);
   RunCmd('cmd.exe', '/c if exist "' + SourceDir + '\pyproject.toml" copy /Y "' + SourceDir + '\pyproject.toml" "' + AppDir + '\pyproject.toml"', '', ResultCode);
   TechLog('  All source files copied');
 
-  // Step 5: Install Python dependencies
+  // Step 5: Create venv, install Python dependencies, and build data
   ProgressPage.SetProgress(6, 10);
-  ProgressPage.SetText('Installing Python dependencies (pip)...', 'This may take a few minutes...');
-  TechLog('[STEP 5/6] Installing Python dependencies...');
+  ProgressPage.SetText('Creating virtual environment and installing dependencies...', 'This may take a few minutes...');
+  TechLog('[STEP 5/6] Creating isolated Python runtime...');
 
-  RunCmd('cmd.exe', '/c pip install -r "' + AppDir + '\requirements.txt" --quiet 2>&1', AppDir, ResultCode);
-  if ResultCode = 0 then
-    TechLog('  Dependencies installed successfully')
-  else
-    TechLog('  [WARNING] pip returned exit code: ' + IntToStr(ResultCode));
+  PythonLauncher := DetectPythonLauncher();
+  if PythonLauncher = '' then
+  begin
+    FailInstall('Python 3.12+ was not found. Install Python, ensure it is on PATH, and rerun setup.');
+    Exit;
+  end;
 
-  // Step 6: Download pre-built UI using curl.exe
+  RunCmd('cmd.exe', '/c ' + PythonLauncher + ' -m venv "' + AppDir + '\.venv"', AppDir, ResultCode);
+  if ResultCode <> 0 then
+  begin
+    FailInstall('Failed to create the LexiCore virtual environment.');
+    Exit;
+  end;
+
+  VenvPython := AppDir + '\.venv\Scripts\python.exe';
+  if not FileExists(VenvPython) then
+  begin
+    FailInstall('The virtual environment was created without python.exe. Setup cannot continue.');
+    Exit;
+  end;
+
+  RunCmd('cmd.exe', '/c "' + VenvPython + '" -m pip install --upgrade pip --disable-pip-version-check', AppDir, ResultCode);
+  if ResultCode <> 0 then
+  begin
+    FailInstall('Failed to upgrade pip inside the LexiCore virtual environment.');
+    Exit;
+  end;
+
+  RunCmd('cmd.exe', '/c "' + VenvPython + '" -m pip install --disable-pip-version-check -r "' + AppDir + '\requirements.txt"', AppDir, ResultCode);
+  if ResultCode <> 0 then
+  begin
+    FailInstall('Python dependencies failed to install. Setup stopped before writing a broken installation.');
+    Exit;
+  end;
+  TechLog('  Runtime dependencies installed successfully');
+
+  RunCmd('cmd.exe', '/c "' + VenvPython + '" -m engine.data.builder "' + AppDir + '\scripts\sample_dictionary.json"', AppDir, ResultCode);
+  if ResultCode <> 0 then
+  begin
+    FailInstall('LexiCore could not build its initial dictionary data.');
+    Exit;
+  end;
+
+  if (not FileExists(AppDir + '\data\index.data')) or (not FileExists(AppDir + '\data\meaning.bin')) then
+  begin
+    FailInstall('Dictionary build finished without producing index.data and meaning.bin.');
+    Exit;
+  end;
+
+  // Step 6: Extract bundled UI
   ProgressPage.SetProgress(7, 10);
-  ProgressPage.SetText('Downloading LexiCore UI...', 'Downloading pre-built release...');
-  TechLog('[STEP 6/6] Downloading pre-built UI...');
-  TechLog('  URL: https://github.com/yuki-20/Lexi-Core/releases/download/v5.5/LexiCore_UI.zip');
+  ProgressPage.SetText('Installing LexiCore UI...', 'Extracting bundled Windows release...');
+  TechLog('[STEP 6/6] Installing bundled Windows UI...');
 
   ForceDirectories(AppDir + '\ui');
-
-  RunCmd(ExpandConstant('{sys}\curl.exe'),
-    '-L -o "' + TempUIZip + '" "https://github.com/yuki-20/Lexi-Core/releases/download/v5.5/LexiCore_UI.zip" --ssl-no-revoke -s',
-    '', ResultCode);
-
-  if (ResultCode = 0) and FileExists(TempUIZip) then
+  ExtractTemporaryFile('LexiCore_UI.zip');
+  if not FileExists(TempUIZip) then
   begin
-    ProgressPage.SetProgress(8, 10);
-    ProgressPage.SetText('Extracting LexiCore UI...', '');
-    TechLog('  Download complete. Extracting...');
-
-    RunCmd(ExpandConstant('{sys}\tar.exe'),
-      '-xf "' + TempUIZip + '" -C "' + AppDir + '\ui"',
-      '', ResultCode);
-    TechLog('  UI extracted to ' + AppDir + '\ui (exit code: ' + IntToStr(ResultCode) + ')');
-  end
-  else
-  begin
-    TechLog('  [WARNING] Pre-built download failed (code: ' + IntToStr(ResultCode) + ')');
-
-    if FileExists('C:\flutter\bin\flutter.bat') then
-    begin
-      TechLog('  Fallback: building from source with Flutter SDK...');
-      ProgressPage.SetText('Building LexiCore UI from source...', 'This may take 1-2 minutes...');
-
-      RunCmd('cmd.exe', '/c xcopy "' + SourceDir + '\ui" "' + AppDir + '\ui_src" /E /I /Y /Q', '', ResultCode);
-      RunCmd('cmd.exe', '/c "C:\flutter\bin\flutter.bat" pub get', AppDir + '\ui_src', ResultCode);
-      RunCmd('cmd.exe', '/c "C:\flutter\bin\flutter.bat" build windows --release', AppDir + '\ui_src', ResultCode);
-
-      if ResultCode = 0 then
-      begin
-        RunCmd('cmd.exe', '/c xcopy "' + AppDir + '\ui_src\build\windows\x64\runner\Release\*" "' + AppDir + '\ui" /E /I /Y /Q', '', ResultCode);
-        RunCmd('cmd.exe', '/c rmdir /S /Q "' + AppDir + '\ui_src"', '', ResultCode);
-        TechLog('  Flutter build successful, UI deployed');
-      end
-      else
-        MsgBox('Could not build the UI. Please build manually.', mbError, MB_OK);
-    end
-    else
-      MsgBox('Could not download UI and Flutter SDK not found. Please check your internet connection.', mbError, MB_OK);
+    FailInstall('Bundled LexiCore_UI.zip was not found inside the installer package.');
+    Exit;
   end;
+
+  RunCmd(ExpandConstant('{sys}\tar.exe'),
+    '-xf "' + TempUIZip + '" -C "' + AppDir + '\ui"',
+    '', ResultCode);
+  if ResultCode <> 0 then
+  begin
+    FailInstall('The bundled Windows UI could not be extracted.');
+    Exit;
+  end;
+  if not FileExists(AppDir + '\ui\lexicore_ui.exe') then
+  begin
+    FailInstall('The bundled Windows UI did not produce ui\lexicore_ui.exe.');
+    Exit;
+  end;
+  TechLog('  UI extracted successfully');
 
   // Cleanup temp files
   ProgressPage.SetProgress(9, 10);
@@ -423,13 +485,14 @@ begin
   TechLog('');
   TechLog('[CLEANUP] Removing temporary files...');
   DeleteFile(TempZip);
+  DeleteFile(TempUIZip);
   DelTree(TempExtract, True, True, True);
 
   ProgressPage.SetProgress(10, 10);
   ProgressPage.SetText('Installation complete!', '');
   TechLog('');
   TechLog('═══════════════════════════════════════════════════════');
-  TechLog('  LexiCore v5.5 installed successfully!');
+  TechLog('  LexiCore v5.5.1 installed successfully!');
   TechLog('  Location: ' + AppDir);
   TechLog('═══════════════════════════════════════════════════════');
 
@@ -476,6 +539,7 @@ end;
 function PrepareToInstall(var NeedsRestart: Boolean): String;
 begin
   Result := '';
+  InstallError := '';
 
   // Determine mode
   if ModeTechRadio.Checked then
@@ -496,6 +560,8 @@ begin
   finally
     ProgressPage.Hide;
   end;
+
+  Result := InstallError;
 end;
 
 // ─── Kill LexiCore processes before uninstall ─────────────────

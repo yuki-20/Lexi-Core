@@ -66,7 +66,10 @@ class _HomePageState extends State<HomePage> {
 
     if (mounted) {
       setState(() {
-        _userName = profile['display_name']?.toString() ?? 'Learner';
+        _userName =
+            profile['name']?.toString() ??
+            profile['display_name']?.toString() ??
+            'Learner';
         _wotd = wotd;
       });
     }

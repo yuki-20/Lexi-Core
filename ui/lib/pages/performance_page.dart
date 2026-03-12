@@ -7,6 +7,7 @@
 ///   - Pet collection showcase
 library;
 
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../theme/liquid_glass_theme.dart';
@@ -49,9 +50,16 @@ class _PerformancePageState extends State<PerformancePage> {
   // Quests
   List<Map<String, dynamic>> _quests = [];
 
+  // v6 badges
+  List<Map<String, dynamic>> _achievements = [];
+  StreamSubscription<DateTime>? _progressSubscription;
+
   @override
   void initState() {
     super.initState();
+    _progressSubscription = _engine.progressStream.listen((_) {
+      _loadData();
+    });
     _loadData();
   }
 
@@ -67,6 +75,7 @@ class _PerformancePageState extends State<PerformancePage> {
         _engine.getAllPets().timeout(const Duration(seconds: 5), onTimeout: () => <Map<String, dynamic>>[]),
         _engine.getSavedWords().timeout(const Duration(seconds: 5), onTimeout: () => <Map<String, dynamic>>[]),
         _engine.getQuests().timeout(const Duration(seconds: 5), onTimeout: () => <Map<String, dynamic>>[]),
+        _engine.getAchievements().timeout(const Duration(seconds: 5), onTimeout: () => <Map<String, dynamic>>[]),
       ]);
 
       if (!mounted) return;
@@ -77,6 +86,7 @@ class _PerformancePageState extends State<PerformancePage> {
       final pets = results[3] as List;
       final saved = results[4] as List;
       final quests = results[5] as List;
+      final achievements = results[6] as List;
 
       final learning = stats['learning'] as Map? ?? {};
       final quizPerf = performance['quiz'] as Map? ?? {};
@@ -100,12 +110,19 @@ class _PerformancePageState extends State<PerformancePage> {
 
         _pets = List<Map<String, dynamic>>.from(pets);
         _quests = List<Map<String, dynamic>>.from(quests);
+        _achievements = List<Map<String, dynamic>>.from(achievements);
 
         _loading = false;
       });
     } catch (_) {
       if (mounted) setState(() => _loading = false);
     }
+  }
+
+  @override
+  void dispose() {
+    _progressSubscription?.cancel();
+    super.dispose();
   }
 
   @override
@@ -481,6 +498,99 @@ class _PerformancePageState extends State<PerformancePage> {
 
           const SizedBox(height: 28),
 
+          Text('Achievement Badges', style: LiquidGlassTheme.label)
+              .animate().fadeIn(delay: 690.ms),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 12,
+            runSpacing: 12,
+            children: _achievements.map((achievement) {
+              final unlocked = achievement['unlocked'] == true;
+              final target = (achievement['target'] as num?)?.toInt() ?? 1;
+              final progress = (achievement['progress'] as num?)?.toInt() ?? 0;
+              final color = _parseHexColor(
+                achievement['color']?.toString(),
+                fallback: LiquidGlassTheme.accentPrimary,
+              );
+
+              return SizedBox(
+                width: 220,
+                child: GlassPanel(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            width: 38,
+                            height: 38,
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(12),
+                              color: color.withValues(alpha: unlocked ? 0.18 : 0.08),
+                            ),
+                            child: Icon(
+                              _achievementIcon(achievement['icon']?.toString()),
+                              size: 18,
+                              color: unlocked ? color : LiquidGlassTheme.textMuted,
+                            ),
+                          ),
+                          const Spacer(),
+                          if (unlocked)
+                            Text(
+                              'Unlocked',
+                              style: LiquidGlassTheme.bodySmall.copyWith(
+                                fontSize: 10,
+                                color: color,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        achievement['name']?.toString() ?? 'Achievement',
+                        style: LiquidGlassTheme.headingSm.copyWith(fontSize: 15),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        achievement['desc']?.toString() ?? '',
+                        style: LiquidGlassTheme.bodySmall.copyWith(
+                          fontSize: 11,
+                          color: unlocked
+                              ? LiquidGlassTheme.textSecondary
+                              : LiquidGlassTheme.textMuted,
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(4),
+                        child: LinearProgressIndicator(
+                          value: target > 0 ? progress / target : 0,
+                          minHeight: 5,
+                          backgroundColor: Colors.white.withValues(alpha: 0.06),
+                          color: unlocked ? color : color.withValues(alpha: 0.55),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        achievement['detail']?.toString().isNotEmpty == true
+                            ? achievement['detail'].toString()
+                            : '$progress / $target',
+                        style: LiquidGlassTheme.bodySmall.copyWith(
+                          fontSize: 10,
+                          color: LiquidGlassTheme.textMuted,
+                        ),
+                      ),
+                    ],
+                  ),
+                ).animate().fadeIn(duration: 350.ms).slideY(begin: 0.03, end: 0),
+              );
+            }).toList(),
+          ),
+
+          const SizedBox(height: 28),
+
           // ── Pet Collection ──
           Text('Pet Collection', style: LiquidGlassTheme.label)
               .animate().fadeIn(delay: 700.ms),
@@ -595,6 +705,38 @@ class _PerformancePageState extends State<PerformancePage> {
         ],
       ),
     );
+  }
+
+  IconData _achievementIcon(String? iconName) {
+    switch (iconName) {
+      case 'search':
+        return Icons.search_rounded;
+      case 'bookmark':
+        return Icons.bookmark_rounded;
+      case 'quiz':
+        return Icons.quiz_rounded;
+      case 'workspace_premium':
+        return Icons.workspace_premium_rounded;
+      case 'local_fire_department':
+        return Icons.local_fire_department_rounded;
+      case 'pets':
+        return Icons.pets_rounded;
+      case 'military_tech':
+        return Icons.military_tech_rounded;
+      default:
+        return Icons.emoji_events_rounded;
+    }
+  }
+
+  Color _parseHexColor(String? value, {required Color fallback}) {
+    if (value == null || value.isEmpty) return fallback;
+    final hex = value.startsWith('#') ? value.substring(1) : value;
+    try {
+      final normalized = hex.length == 6 ? 'FF$hex' : hex;
+      return Color(int.parse(normalized, radix: 16));
+    } catch (_) {
+      return fallback;
+    }
   }
 }
 

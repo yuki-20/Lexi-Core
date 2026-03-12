@@ -96,7 +96,10 @@ class _DictionaryPageState extends State<DictionaryPage> {
 
     // Fallback: try full search (includes online)
     if (result == null) {
-      final searchResult = await _engine.searchExact(word);
+      var searchResult = await _engine.searchExact(word);
+      if (!searchResult.found) {
+        searchResult = await _engine.searchOnline(word);
+      }
       if (searchResult.found) {
         result = {
           'word': searchResult.word,

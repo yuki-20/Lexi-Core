@@ -3,6 +3,7 @@
 /// Center area with page content over liquid glass background.
 library;
 
+import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui';
 import 'package:flutter/material.dart';
@@ -73,6 +74,7 @@ class _LexiCoreShellState extends State<LexiCoreShell>
   late final List<AnimationController> _orbControllers;
   late AnimationController _meshController;
   late AnimationController _pageController;
+  StreamSubscription<DateTime>? _progressSubscription;
 
   // Sidebar hover state
   bool _sidebarExpanded = false;
@@ -112,6 +114,9 @@ class _LexiCoreShellState extends State<LexiCoreShell>
       vsync: this,
       duration: const Duration(milliseconds: 350),
     );
+    _progressSubscription = _engine.progressStream.listen((_) {
+      _loadPetData();
+    });
     _loadPetData();
   }
 
@@ -142,6 +147,7 @@ class _LexiCoreShellState extends State<LexiCoreShell>
     for (final c in _orbControllers) {
       c.dispose();
     }
+    _progressSubscription?.cancel();
     _meshController.dispose();
     _pageController.dispose();
     super.dispose();
