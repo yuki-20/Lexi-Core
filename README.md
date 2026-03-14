@@ -1,4 +1,4 @@
-# 🌊 LexiCore Engine v5.5.1
+# 🌊 LexiCore Engine v5.6
 
 <div align="center">
 
@@ -59,6 +59,7 @@
 - **Achievement badges** — Unlock milestone rewards for search, save, streak, quiz, pet, and mastery progress
 - **Streak system** with day-count tracking and XP multipliers (1.1× to 1.6×)
 - **Streak Pets** — Unlock virtual companions (Ember Fox, Volt Owl, Aqua Dragon, Prisma) at milestone streaks
+- **Level roadmap API** — `GET /api/xp/levels` returns all 20 milestones with glow tiers for profile UI
 
 ### 📁 Saved Words & Organization
 - **Save/unsave toggle** — Tap bookmark to save, tap again to unsave (correctly synced across views)
@@ -87,7 +88,7 @@
 ## 🏗️ Architecture
 
 ```
-LexiCore v5.5.1
+LexiCore v5.6
 ├── engine/                     Python Backend (FastAPI on :8741)
 │   ├── data/                   Huffman coding, binary index, meaning store
 │   │   ├── huffman.py          Huffman compression/decompression
@@ -108,7 +109,7 @@ LexiCore v5.5.1
 │   │   ├── ocr.py              Screen region OCR
 │   │   ├── anki_export.py      Anki .apkg export
 │   │   └── cambridge.py        Cambridge Dictionary + dictionaryapi.dev
-│   ├── main.py                 FastAPI server (1800+ lines, 70+ endpoints)
+│   ├── main.py                 FastAPI server (1900+ lines, 75+ endpoints)
 │   ├── ai_config.json          Encrypted API key (gitignored)
 │   └── encrypt_key.py          API key encryption utility
 │

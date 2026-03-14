@@ -497,10 +497,11 @@ async def api_digest_saved():
             progress = round((i + 1) / total * 100) if total > 0 else 100
             yield f"data: {json.dumps({'word': word, 'status': status, 'definition': definition, 'progress': progress, 'current': i + 1, 'total': total, 'found': found})}\n\n"
 
-            # Small delay to avoid overwhelming the API
-            await asyncio.sleep(0.05)
+            # Throttle to avoid API rate limits (dictionaryapi.dev + Cambridge)
+            await asyncio.sleep(0.3)
 
-        yield f"data: {json.dumps({'done': True, 'total': total, 'found': found})}\n\n"
+        skipped = total - found
+        yield f"data: {json.dumps({'done': True, 'total': total, 'found': found, 'skipped': skipped})}\n\n"
 
     if not undigested:
         return JSONResponse({"message": "All words already have definitions", "total": 0})
@@ -636,6 +637,22 @@ async def api_add_card(deck_id: int, req: AddCardRequest):
     return JSONResponse({"id": card_id, "word": req.word, "definition": definition})
 
 
+class BatchCardsRequest(BaseModel):
+    words: list[str]
+
+
+@app.post("/api/decks/{deck_id}/cards/batch")
+async def api_add_cards_batch(deck_id: int, req: BatchCardsRequest):
+    """Batch add cards to a deck from a list of words, auto-filling definitions."""
+    added = []
+    for word in req.words:
+        defn = engine.get_definition_dict(word)
+        definition = defn["definitions"][0] if defn and defn.get("definitions") else None
+        card_id = engine.db.add_card(deck_id, word, definition)
+        added.append({"id": card_id, "word": word, "definition": definition})
+    return JSONResponse({"cards_added": len(added), "cards": added})
+
+
 @app.delete("/api/cards/{card_id}")
 async def api_delete_card(card_id: int):
     deleted = engine.db.delete_card(card_id)
@@ -721,7 +738,8 @@ async def api_generate_quiz(deck_id: int | None = Query(None),
 
     if len(valid) < 4:
         return JSONResponse(
-            {"error": "Not enough words with definitions. Try digesting your words first!"},
+            {"error": f"Only {len(valid)} words have definitions (need 4+). Try digesting your saved words first!",
+             "valid_count": len(valid), "total_count": len(words)},
             status_code=400,
         )
 
@@ -943,12 +961,19 @@ async def api_get_all_pets():
     pets = []
     for pet_id, info in engine.db.PETS.items():
         streak_req = info.get("streak_req", 0)
-        req_text = f"Reach {streak_req}-day streak" if streak_req > 0 else "Get 3 perfect quiz scores"
+        perfect_req = info.get("requires_perfect_quizzes", 0)
+        if perfect_req > 0:
+            req_text = f"Get {perfect_req} perfect quiz scores"
+        elif streak_req > 0:
+            req_text = f"Reach {streak_req}-day streak"
+        else:
+            req_text = "Special unlock"
+        desc = info.get("desc", "") or f"A companion unlocked by: {req_text}"
         pets.append({
             "id": pet_id,
             "name": info["name"],
             "emoji": info.get("emoji", ""),
-            "description": info.get("desc", ""),
+            "description": desc,
             "requirement": req_text,
             "streak_req": streak_req,
             "unlocked": pet_id in unlocked,
@@ -1267,6 +1292,34 @@ async def api_xp_award(req: dict):
     })
 
 
+@app.get("/api/xp/levels")
+async def api_xp_levels():
+    """Return all level milestones with XP requirements, titles, and perks."""
+    from engine.learning.xp_engine import xp_for_level, level_title, _TITLES, MAX_LEVEL
+    levels = []
+    for threshold, title in sorted(_TITLES, key=lambda t: t[0]):
+        xp_needed = xp_for_level(threshold)
+        # Assign perks per tier
+        if threshold >= 100:
+            glow = "legendary"
+        elif threshold >= 50:
+            glow = "epic"
+        elif threshold >= 20:
+            glow = "rare"
+        elif threshold >= 10:
+            glow = "uncommon"
+        else:
+            glow = None
+        levels.append({
+            "level": threshold,
+            "title": title,
+            "xp_required": xp_needed,
+            "glow": glow,
+        })
+    total_xp = engine.db.get_total_exp()
+    return JSONResponse({"levels": levels, "current_xp": total_xp, "max_level": MAX_LEVEL})
+
+
 @app.get("/api/quests")
 async def api_get_quests():
     """Get all quests with current progress."""
@@ -1533,13 +1586,13 @@ async def api_ai_chat(req: AiChatRequest):
     messages = _inject_images(messages, req.images, req.model)
 
     try:
+        _headers = {"Content-Type": "application/json"}
+        if _FPT_API_KEY and _FPT_API_KEY.strip():
+            _headers["Authorization"] = f"Bearer {_FPT_API_KEY.strip()}"
         async with httpx.AsyncClient(timeout=90.0) as client:
             resp = await client.post(
                 _FPT_BASE_URL,
-                headers={
-                    "Authorization": f"Bearer {_FPT_API_KEY}",
-                    "Content-Type": "application/json",
-                },
+                headers=_headers,
                 json={
                     "model": req.model,
                     "messages": messages,
@@ -1609,13 +1662,13 @@ async def api_ai_chat_stream(req: AiChatRequest):
     async def event_generator():
         try:
             async with httpx.AsyncClient(timeout=120.0) as client:
+                _s_headers = {"Content-Type": "application/json"}
+                if _FPT_API_KEY and _FPT_API_KEY.strip():
+                    _s_headers["Authorization"] = f"Bearer {_FPT_API_KEY.strip()}"
                 async with client.stream(
                     "POST",
                     _FPT_BASE_URL,
-                    headers={
-                        "Authorization": f"Bearer {_FPT_API_KEY}",
-                        "Content-Type": "application/json",
-                    },
+                    headers=_s_headers,
                     json={
                         "model": req.model,
                         "messages": messages,

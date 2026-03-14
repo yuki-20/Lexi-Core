@@ -4,6 +4,122 @@ A chronological log of all prompts and responses between the user and Antigravit
 
 ---
 
+## Session — 2026-03-15 03:00
+
+### 🧑 Prompt
+
+> Fix the following bugs and add features:
+> 1. Digest feature only processes ~50% of imported words — fix to 100%
+> 2. Add user level overview with perks and glowing titles
+> 3. Pet definitions missing — fix
+> 4. Lexi AI "Bearer" error — fix
+> 5. Quiz can't generate even with 50+ digested words — fix error message
+> 6. Add flashcard multi-select (batch card creation endpoint)
+
+### 🤖 Response
+
+**Step 1: Rewrote `engine/media/cambridge.py` (lines 1-185)**
+
+Full rewrite with retry logic and Cambridge Dictionary HTML fallback:
+
+```python
+# Retry logic: 2 attempts on dictionaryapi.dev
+for attempt in range(2):
+    async with session.get(f"https://api.dictionaryapi.dev/api/v2/entries/en/{word}") as resp:
+        if resp.status == 200:
+            data = await resp.json()
+            # parse definition...
+            return result
+    await asyncio.sleep(0.5)
+
+# Fallback: scrape Cambridge Dictionary HTML
+async with session.get(f"https://dictionary.cambridge.org/dictionary/english/{word}") as resp:
+    # parse HTML for definition, part of speech, examples
+```
+
+**Step 2: Applied 5 targeted fixes to `engine/main.py`**
+
+Modified files:
+- `engine/main.py:499-503` — Digest delay increased from 0.05s to 0.3s, added `skipped` counter
+
+```python
+# Before:
+await asyncio.sleep(0.05)
+yield f"data: {json.dumps({'done': True, 'total': total, 'found': found})}\n\n"
+
+# After:
+await asyncio.sleep(0.3)
+skipped = total - found
+yield f"data: {json.dumps({'done': True, 'total': total, 'found': found, 'skipped': skipped})}\n\n"
+```
+
+- `engine/main.py:722-726` — Quiz error message with counts
+
+```python
+# Before:
+{"error": "Not enough words with definitions. Try digesting your words first!"}
+
+# After:
+{"error": f"Only {len(valid)} words have definitions (need 4+). Try digesting your saved words first!",
+ "valid_count": len(valid), "total_count": len(words)}
+```
+
+- `engine/main.py:944-955` — Pet descriptions fallback
+
+```python
+desc = info.get("desc", "") or f"A companion unlocked by: {req_text}"
+```
+
+- `engine/main.py:1535-1542` — AI Bearer guard (non-streaming)
+
+```python
+_headers = {"Content-Type": "application/json"}
+if _FPT_API_KEY and _FPT_API_KEY.strip():
+    _headers["Authorization"] = f"Bearer {_FPT_API_KEY.strip()}"
+```
+
+- `engine/main.py:1612-1618` — AI Bearer guard (streaming endpoint, same pattern)
+
+**Step 3: Added 2 new endpoints to `engine/main.py`**
+
+- `GET /api/xp/levels` (line ~1293) — Returns 20 milestone levels with XP thresholds, titles, glow tiers
+
+```
+GET http://127.0.0.1:8741/api/xp/levels → 200 OK
+{
+  "levels": [
+    {"level": 1, "title": "Novice", "xp_required": 0, "glow": null},
+    {"level": 10, "title": "Curious Learner", "xp_required": 15000, "glow": "uncommon"},
+    {"level": 50, "title": "Vocabulary Artisan", "xp_required": 375000, "glow": "epic"},
+    {"level": 1000, "title": "∞ Eternal Lexicon", "xp_required": 150000000, "glow": "legendary"}
+    ...
+  ],
+  "current_xp": 155,
+  "max_level": 1000
+}
+```
+
+- `POST /api/decks/{deck_id}/cards/batch` (line ~641) — Batch add cards with auto-definition
+
+**Step 4: Verification**
+
+```
+python -m engine.main
+# INFO: Uvicorn running on http://127.0.0.1:8741
+
+# Test levels endpoint:
+GET /api/xp/levels → 200 OK (20 levels returned)
+
+# Test pets endpoint:
+GET /api/pets → 200 OK (all 4 pets have descriptions)
+```
+
+**Step 5: Version bump**
+- `CHANGELOG.md` — Added v5.6 section with 3 new features, 4 bug fixes
+- `README.md` — Bumped version to v5.6, updated architecture tree, added level roadmap API
+
+---
+
 ### 2026-03-15 — GitHub connection, security audit & push
 
 User request:

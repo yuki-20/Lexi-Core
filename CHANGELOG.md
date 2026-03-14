@@ -4,6 +4,28 @@ All notable changes to LexiCore are documented in this file.
 
 ---
 
+## [5.6] — 2026-03-15
+
+### ✨ New Features
+
+- **Level overview endpoint** — `GET /api/xp/levels` returns all 20 milestone levels with XP thresholds, titles, and glow tiers (null/uncommon/rare/epic/legendary) for building a level roadmap UI
+- **Batch flashcard creation** — `POST /api/decks/{deck_id}/cards/batch` accepts a list of words and auto-fills definitions from local dictionary, enabling multi-select add from saved words
+- **Cambridge Dictionary fallback** — `cambridge.py` fully rewritten with 2-attempt retry logic on dictionaryapi.dev + HTML scraping fallback from Cambridge Dictionary when the API fails
+
+### 🐛 Bug Fixes
+
+- **Digest reliability** — Increased API delay from 0.05s to 0.3s to prevent rate limiting; added `skipped` word counter to final SSE payload so the UI can report exactly how many words failed
+- **AI Bearer error** — Guarded both `/api/ai/chat` and `/api/ai/chat/stream` to skip the `Authorization: Bearer` header entirely when the API key is empty or missing, preventing the `Illegal header value b'Bearer '` crash
+- **Pet descriptions missing** — Pet descriptions now fallback to auto-generated text (e.g., "A companion unlocked by: Reach 7-day streak") when the `desc` field in `PETS` dictionary is empty
+- **Quiz generation error** — Error message now shows exact counts: `"Only X words have definitions (need 4+)"` with `valid_count` and `total_count` fields, helping users understand why quiz can't generate
+
+### 📁 Files Modified
+
+- `engine/media/cambridge.py` — Full rewrite (185 lines): retry logic, Cambridge HTML scraper, async aiohttp session
+- `engine/main.py` — 7 targeted changes across digest, AI chat, pets, quiz, and 2 new endpoints
+
+---
+
 ## [5.5.1] — 2026-03-13
 
 ### 🛠 Fresh Install Recovery
