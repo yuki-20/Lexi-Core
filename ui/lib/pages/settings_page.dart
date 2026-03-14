@@ -1,4 +1,4 @@
-/// LexiCore — Settings / Profile Page (v5.2)
+/// LexiCore — Settings / Profile Page (v5.5.1)
 /// Full profile with cover image, avatar, display name, learning preferences,
 /// data management, appearance theme, and about section.
 library;
@@ -487,12 +487,12 @@ class _SettingsPageState extends State<SettingsPage> {
             child: Column(
               children: [
                 _InfoRow(label: 'App', value: 'LexiCore Engine'),
-                _InfoRow(label: 'Version', value: '5.5.0'),
+                _InfoRow(label: 'Version', value: '5.5.1'),
                 _InfoRow(label: 'UI Engine', value: 'Flutter + Liquid Glass'),
                 _InfoRow(label: 'Backend', value: 'Python FastAPI'),
                 _InfoRow(label: 'Design', value: 'iOS 26 Liquid Glass'),
-                _InfoRow(label: 'AI Models', value: 'DeepSeek R1, Gemma 3, Llama 4'),
-                _InfoRow(label: 'Features', value: 'Dictionary, Quiz, Flashcards, AI'),
+                _InfoRow(label: 'AI Models', value: 'DeepSeek R1, Gemma 3, Qwen3, Llama 3.3'),
+                _InfoRow(label: 'Features', value: 'Dictionary, Quiz, Flashcards, AI, Achievements'),
                 _InfoRow(label: 'Audio', value: 'Google TTS Pronunciation'),
                 _InfoRow(label: 'Web Search', value: 'DuckDuckGo RAG'),
                 _InfoRow(label: 'Storage', value: 'SQLite + Custom Binary Index'),

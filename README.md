@@ -87,7 +87,7 @@
 ## 🏗️ Architecture
 
 ```
-LexiCore v5.5
+LexiCore v5.5.1
 ├── engine/                     Python Backend (FastAPI on :8741)
 │   ├── data/                   Huffman coding, binary index, meaning store
 │   │   ├── huffman.py          Huffman compression/decompression
@@ -124,7 +124,7 @@ LexiCore v5.5
 │   │   │   ├── projects_page.dart      Project management
 │   │   │   ├── project_detail_page.dart  Project details + decks
 │   │   │   ├── saved_words_page.dart   Saved words, digest, add-to-dictionary
-│   │   │   ├── performance_page.dart   Analytics dashboard
+│   │   │   ├── performance_page.dart   Analytics dashboard + achievement badges
 │   │   │   └── settings_page.dart      User profile, avatar, preferences
 │   │   ├── services/
 │   │   │   └── engine_service.dart     HTTP/SSE client for all API calls
@@ -380,6 +380,7 @@ All endpoints are available at `http://localhost:8741`.
 | **v5.3** | Encrypted API key, custom water drop app icon, transparent app icons |
 | **v5.4** | Web search (DuckDuckGo RAG), universal CoT, vision (Gemma 3), flashcard deck editor, `<think>` tags |
 | **v5.5** | Quiz analytics & history chart, save/unsave toggle, add-to-dictionary, XP v2 rebalance (max 1000, 20 titles), auto-digest, quiz count selector, definition quality fixes, SQLite deadlock fix |
+| **v5.5.1** | Fresh install recovery (venv isolation, bundled UI, sample dictionary prebuild), safe AI bootstrap (missing key no longer crashes), runtime dependency fix (python-multipart added, PyAudio/vosk moved to optional), quiz XP/quest regression fix, achievement badges backport, daily login XP gating, profile name sync |
 
 ### 🔮 Planned (v6.0+)
 

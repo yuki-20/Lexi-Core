@@ -4,6 +4,82 @@ A chronological log of all prompts and responses between the user and Antigravit
 
 ---
 
+### 2026-03-15 — GitHub connection, security audit & push
+
+User request:
+- Connect to GitHub so files can be pushed and changes tracked.
+- Verify that anyone who downloads the project from GitHub does NOT gain access to the GitHub account.
+- Push all pending local commits to `origin/main`.
+- Update chat log, README, and settings page to reflect current state.
+
+Investigation — Git configuration:
+
+| Setting | Value |
+|---|---|
+| Remote | `https://github.com/yuki-20/Lexi-Core` |
+| Branch | `main` |
+| User | `yuki-20` |
+| Email | `saoyui779@gmail.com` |
+| Credential helper | `manager` (Windows Credential Manager) |
+
+Local branch was **3 commits ahead** of `origin/main`:
+
+```text
+f0352a1 fix: handle missing ai api key gracefully
+7d4a044 docs: auto-update chat log - fresh install repair
+e32f69d fix: restore fresh install flow and learning progress
+```
+
+Security audit — credential exposure check:
+
+| Check | Result |
+|---|---|
+| GitHub tokens (`ghp_...`) in tracked files | ❌ None found |
+| Passwords or secrets in source code | ❌ None found |
+| `.env` files committed | ❌ Not committed (in `.gitignore`) |
+| `engine/ai_config.json` committed | ❌ Not committed (in `.gitignore`) |
+| Credential/key/pem files tracked | ❌ None found |
+| `git ls-files` sensitive file scan | ❌ Clean |
+
+Conclusion:
+- Credentials are stored locally by **Git Credential Manager** in Windows Credential Manager — never part of the repo.
+- The HTTPS remote URL is a public address, not a credential.
+- `.gitignore` correctly excludes `.env`, `ai_config.json`, and all user data files.
+- **Anyone who clones the repo gets only the source code, not access to the GitHub account.**
+
+Push execution:
+
+```powershell
+git push origin main
+```
+
+Result:
+
+```text
+remote: warning: File installer/LexiCore_UI.zip is 54.46 MB;
+  this is larger than GitHub's recommended maximum file size of 50.00 MB
+To https://github.com/yuki-20/Lexi-Core
+   4ab13d7..f0352a1  main -> main
+Exit code: 0
+```
+
+Post-push verification:
+
+```text
+On branch main
+Your branch is up to date with 'origin/main'.
+git log origin/main..HEAD --oneline → (empty, 0 commits ahead)
+```
+
+All 3 commits successfully pushed. GitHub flagged `installer/LexiCore_UI.zip` (54.46 MB) as above the 50 MB recommendation — consider Git LFS for future growth.
+
+Follow-up changes (this commit):
+- Updated `LEXI_CHAT_LOG.md` with this session
+- Updated `settings_page.dart`: version `5.5.0` → `5.5.1`, fixed AI model names, added Achievements to features
+- Updated `README.md`: architecture tree version bump, added `performance_page.dart`, updated roadmap with v5.5.1
+
+---
+
 ### 2026-03-13 - AI chat missing-key regression fix
 
 User report:
